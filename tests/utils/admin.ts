@@ -28,13 +28,19 @@ export const startIsolatedAdminApp = async (adminKey: string) => {
     await App.spawn(
       defaultConfig({
         deployment: {
-          etcd: { prefix: `/ai-admin-${randomUUID()}` },
+          etcd: {
+            prefix: `/ai-admin-${randomUUID()}`,
+          },
           admin: { admin_key: [{ key: adminKey }] },
+        },
+        server: {
+          proxy: { listen: '127.0.0.1:3000' },
+          admin: { listen: '127.0.0.1:3001' },
         },
       }),
     )
   )
-    .waitForReady()
+    .waitForReady(3000)
     .then((app) => app.waitForReady(3001))) as App;
 };
 
