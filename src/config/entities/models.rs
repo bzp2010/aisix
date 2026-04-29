@@ -8,7 +8,10 @@ use utoipa::ToSchema;
 
 use super::{ConfigProvider, EntityStore, IndexFn, ResourceEntry};
 use crate::{
-    config::entities::types::{HasRateLimit, RateLimit, RateLimitMetric},
+    config::entities::{
+        Provider, ResourceRegistry,
+        types::{HasRateLimit, RateLimit, RateLimitMetric},
+    },
     utils::jsonschema::format_evaluation_error,
 };
 
@@ -30,6 +33,13 @@ pub struct Model {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<RateLimit>,
+}
+
+impl Model {
+    /// Get provider of current model
+    pub fn provider(&self, resources: &ResourceRegistry) -> Option<ResourceEntry<Provider>> {
+        resources.providers.get_by_id(&self.provider_id)
+    }
 }
 
 impl HasRateLimit for ResourceEntry<Model> {
