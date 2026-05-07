@@ -1,5 +1,6 @@
 use std::{convert::Infallible, time::Duration};
 
+use async_trait::async_trait;
 use axum::{
     Json,
     extract::State,
@@ -43,21 +44,24 @@ type AdapterRequest<A> = <A as FormatHandlerAdapter>::Request;
 type AdapterResponse<A> = <A as FormatHandlerAdapter>::Response;
 type AdapterCollector<A> = <A as FormatHandlerAdapter>::Collector;
 
+#[async_trait]
 pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
     type Format: ChatFormat<
             Request = Self::Request,
             Response = Self::Response,
             StreamChunk = Self::StreamChunk,
         >;
-    type Request;
+    type Request: Sync;
     type Response: Serialize;
     type StreamChunk: Serialize + Send + 'static;
     type Error: IntoResponse
+        + std::fmt::Display
         + From<AuthorizationError>
         + From<RateLimitError>
         + From<GatewayError>
         + From<Elapsed>;
     type Collector: Default + Send + 'static;
+    type LifecycleState: Default + Send + 'static;
 
     fn span_name() -> &'static str;
 
@@ -81,6 +85,49 @@ pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
 
     fn output_message_span_properties(collector: &Self::Collector) -> Vec<(String, String)>;
 
+    async fn prepare_lifecycle(
+        _state: &AppState,
+        _request_ctx: &mut RequestContext,
+        _request: &mut Self::Request,
+    ) -> Result<Self::LifecycleState, Self::Error> {
+        Ok(Self::LifecycleState::default())
+    }
+
+    async fn handle_complete_response(
+        _state: &AppState,
+        _request_ctx: &mut RequestContext,
+        _lifecycle_state: &mut Self::LifecycleState,
+        _response: &mut Self::Response,
+        _usage: &Usage,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn handle_stream_item(
+        _state: &AppState,
+        _request_ctx: &mut RequestContext,
+        _lifecycle_state: &mut Self::LifecycleState,
+        _chunk: &mut Self::StreamChunk,
+    ) {
+    }
+
+    async fn handle_stream_success(
+        _state: &AppState,
+        _request_ctx: &mut RequestContext,
+        _lifecycle_state: Self::LifecycleState,
+        _usage: Option<&Usage>,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn handle_stream_failure(
+        _state: &AppState,
+        _request_ctx: &mut RequestContext,
+        _lifecycle_state: Self::LifecycleState,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
     fn serialize_stream_item(chunk: &Self::StreamChunk) -> SseEvent {
         let mut event =
             SseEvent::default().data(<Self::Format as ChatFormat>::serialize_chunk_payload(chunk));
@@ -93,6 +140,10 @@ pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
     }
 
     fn stream_error_event(_error: &GatewayError) -> Option<SseEvent> {
+        None
+    }
+
+    fn lifecycle_error_event(_error: &Self::Error) -> Option<SseEvent> {
         None
     }
 
@@ -134,6 +185,8 @@ where
     })?;
     let provider_instance = create_provider_instance(gateway.as_ref(), &provider)?;
     let provider_base_url = provider_instance.effective_base_url().ok();
+    let mut lifecycle_state =
+        A::prepare_lifecycle(&state, &mut request_ctx, &mut request_data).await?;
 
     let span = Span::enter_with_local_parent(A::span_name());
     apply_span_properties(
@@ -146,25 +199,46 @@ where
     );
 
     let (response, span) = (WithSpan {
-        inner: maybe_timeout(
-            timeout,
-            gateway.chat::<AdapterFormat<A>>(&request_data, &provider_instance),
-        ),
+        inner: maybe_timeout(timeout, async {
+            Ok(state
+                .gateway()
+                .chat::<AdapterFormat<A>>(&request_data, &provider_instance)
+                .await?)
+        }),
         span: Some(span),
     })
     .await;
 
     match response {
-        Ok(Ok(ChatResponse::Complete { response, usage })) => {
+        Ok(Ok(ChatResponse::Complete {
+            mut response,
+            usage,
+        })) => {
+            A::handle_complete_response(
+                &state,
+                &mut request_ctx,
+                &mut lifecycle_state,
+                &mut response,
+                &usage,
+            )
+            .await?;
             span.add_properties(|| A::response_span_properties(&response, &usage));
             handle_regular_response::<A>(response, usage, &mut request_ctx).await
         }
         Ok(Ok(ChatResponse::Stream { stream, usage_rx })) => {
-            handle_stream_response::<A>(stream, usage_rx, &mut request_ctx, span).await
+            handle_stream_response::<A>(
+                state,
+                stream,
+                usage_rx,
+                &mut request_ctx,
+                span,
+                lifecycle_state,
+            )
+            .await
         }
         Ok(Err(err)) => {
             span.add_property(|| ("error.type", "gateway_error"));
-            Err(err.into())
+            Err(err)
         }
         Err(err) => {
             span.add_property(|| ("error.type", "timeout"));
@@ -212,14 +286,11 @@ fn spawn_stream_usage_observer(request_ctx: RequestContext, usage_rx: oneshot::R
     });
 }
 
-async fn finalize_stream_usage(
+async fn finalize_stream_usage_observation(
     request_ctx: &mut RequestContext,
     usage_rx: &mut Option<oneshot::Receiver<Usage>>,
     span: &Span,
-    output_message_properties: Vec<(String, String)>,
 ) {
-    span.add_properties(|| output_message_properties);
-
     if let Some(mut usage_rx) = usage_rx.take() {
         match usage_rx.try_recv() {
             Ok(usage) => {
@@ -240,11 +311,72 @@ async fn finalize_stream_usage(
     }
 }
 
+async fn finalize_stream_success<A>(
+    state: &AppState,
+    request_ctx: &mut RequestContext,
+    usage_rx: &mut Option<oneshot::Receiver<Usage>>,
+    span: &Span,
+    output_message_properties: Vec<(String, String)>,
+    lifecycle_state: &mut Option<A::LifecycleState>,
+) -> Result<(), A::Error>
+where
+    A: FormatHandlerAdapter,
+{
+    span.add_properties(|| output_message_properties);
+
+    let Some(lifecycle_state) = lifecycle_state.take() else {
+        finalize_stream_usage_observation(request_ctx, usage_rx, span).await;
+        return Ok(());
+    };
+
+    if let Some(mut usage_rx) = usage_rx.take() {
+        match usage_rx.try_recv() {
+            Ok(usage) => {
+                if let Err(err) = hooks::rate_limit::post_check_streaming(request_ctx, &usage).await
+                {
+                    error!("Rate limit post_check_streaming error: {}", err);
+                }
+                hooks::observability::record_streaming_usage(request_ctx, &usage).await;
+                span.add_properties(|| usage_span_properties(&usage));
+
+                A::handle_stream_success(state, request_ctx, lifecycle_state, Some(&usage)).await?;
+            }
+            Err(TryRecvError::Empty) => match usage_rx.await {
+                Ok(usage) => {
+                    if let Err(err) =
+                        hooks::rate_limit::post_check_streaming(request_ctx, &usage).await
+                    {
+                        error!("Rate limit post_check_streaming error: {}", err);
+                    }
+                    hooks::observability::record_streaming_usage(request_ctx, &usage).await;
+                    span.add_properties(|| usage_span_properties(&usage));
+
+                    A::handle_stream_success(state, request_ctx, lifecycle_state, Some(&usage))
+                        .await?;
+                }
+                Err(err) => {
+                    error!("Failed to receive streaming usage from gateway: {}", err);
+                    A::handle_stream_success(state, request_ctx, lifecycle_state, None).await?;
+                }
+            },
+            Err(TryRecvError::Closed) => {
+                error!("Failed to receive streaming usage from gateway: channel closed");
+                A::handle_stream_success(state, request_ctx, lifecycle_state, None).await?;
+            }
+        }
+        return Ok(());
+    }
+
+    A::handle_stream_success(state, request_ctx, lifecycle_state, None).await
+}
+
 async fn handle_stream_response<A>(
+    state: AppState,
     stream: ChatResponseStream<AdapterFormat<A>>,
     usage_rx: oneshot::Receiver<Usage>,
     request_ctx: &mut RequestContext,
     span: Span,
+    lifecycle_state: A::LifecycleState,
 ) -> Result<Response, A::Error>
 where
     A: FormatHandlerAdapter,
@@ -252,8 +384,10 @@ where
     use futures::stream::StreamExt;
 
     let stream_request_ctx = request_ctx.clone();
+    let stream_state = state.clone();
     let sse_stream = futures::stream::unfold(
         (
+            stream_state,
             stream,
             span,
             stream_request_ctx,
@@ -262,8 +396,10 @@ where
             Some(usage_rx),
             AdapterCollector::<A>::default(),
             false,
+            Some(lifecycle_state),
         ),
         |(
+            state,
             mut stream,
             span,
             mut request_ctx,
@@ -272,6 +408,7 @@ where
             mut usage_rx,
             mut output_collector,
             mut first_output_arrived,
+            mut lifecycle_state,
         )| async move {
             if should_terminate {
                 drop(span);
@@ -279,7 +416,16 @@ where
             }
 
             match stream.next().await {
-                Some(Ok(chunk)) => {
+                Some(Ok(mut chunk)) => {
+                    if let Some(lifecycle_state) = lifecycle_state.as_mut() {
+                        A::handle_stream_item(
+                            &state,
+                            &mut request_ctx,
+                            lifecycle_state,
+                            &mut chunk,
+                        );
+                    }
+
                     A::record_stream_item(&mut output_collector, &chunk);
 
                     let now_starts_output = !first_output_arrived && A::starts_output(&chunk);
@@ -297,6 +443,7 @@ where
                     Some((
                         Ok::<SseEvent, Infallible>(A::serialize_stream_item(&chunk)),
                         (
+                            state,
                             stream,
                             span,
                             request_ctx,
@@ -305,24 +452,31 @@ where
                             usage_rx,
                             output_collector,
                             first_output_arrived,
+                            lifecycle_state,
                         ),
                     ))
                 }
                 Some(Err(err)) => {
                     error!("Gateway stream error: {}", err);
                     span.add_property(|| ("error.type", "stream_error"));
-                    finalize_stream_usage(
-                        &mut request_ctx,
-                        &mut usage_rx,
-                        &span,
-                        A::output_message_span_properties(&output_collector),
-                    )
-                    .await;
+                    span.add_properties(|| A::output_message_span_properties(&output_collector));
+
+                    if let Some(lifecycle_state) = lifecycle_state.take() {
+                        if let Err(lifecycle_err) =
+                            A::handle_stream_failure(&state, &mut request_ctx, lifecycle_state)
+                                .await
+                        {
+                            error!("Stream failure lifecycle error: {}", lifecycle_err);
+                        }
+                    }
+
+                    finalize_stream_usage_observation(&mut request_ctx, &mut usage_rx, &span).await;
 
                     if let Some(event) = A::stream_error_event(&err) {
                         Some((
                             Ok(event),
                             (
+                                state,
                                 stream,
                                 span,
                                 request_ctx,
@@ -331,6 +485,7 @@ where
                                 usage_rx,
                                 output_collector,
                                 first_output_arrived,
+                                lifecycle_state,
                             ),
                         ))
                     } else {
@@ -339,18 +494,49 @@ where
                     }
                 }
                 None => {
-                    finalize_stream_usage(
+                    match finalize_stream_success::<A>(
+                        &state,
                         &mut request_ctx,
                         &mut usage_rx,
                         &span,
                         A::output_message_span_properties(&output_collector),
+                        &mut lifecycle_state,
                     )
-                    .await;
+                    .await
+                    {
+                        Ok(()) => {}
+                        Err(err) => {
+                            error!("Stream success lifecycle error: {}", err);
+                            span.add_property(|| ("error.type", "stream_success_lifecycle_error"));
+
+                            if let Some(event) = A::lifecycle_error_event(&err) {
+                                return Some((
+                                    Ok(event),
+                                    (
+                                        state,
+                                        stream,
+                                        span,
+                                        request_ctx,
+                                        true,
+                                        saw_item,
+                                        usage_rx,
+                                        output_collector,
+                                        first_output_arrived,
+                                        lifecycle_state,
+                                    ),
+                                ));
+                            }
+
+                            drop(span);
+                            return None;
+                        }
+                    }
 
                     if let Some(event) = A::end_of_stream_event(saw_item) {
                         Some((
                             Ok(event),
                             (
+                                state,
                                 stream,
                                 span,
                                 request_ctx,
@@ -359,6 +545,7 @@ where
                                 usage_rx,
                                 output_collector,
                                 first_output_arrived,
+                                lifecycle_state,
                             ),
                         ))
                     } else {
