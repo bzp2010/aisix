@@ -57,7 +57,7 @@ impl Guardrail {
     }
 }
 
-fn validate(key: &str, value: &Guardrail) -> Result<(), String> {
+pub(crate) fn validate_guardrail_definition(key: &str, value: &Guardrail) -> Result<(), String> {
     let evaluation = SCHEMA_VALIDATOR.evaluate(
         &serde_json::to_value(value)
             .map_err(|error| format!("Failed to serialize guardrail for validation: {}", error))?,
@@ -89,8 +89,14 @@ pub struct GuardrailsStore {
 impl GuardrailsStore {
     pub async fn new(provider: Arc<dyn ConfigProvider + Send + Sync>) -> Self {
         Self {
-            store: EntityStore::new(provider, "/guardrails/", "guardrails", Some(validate), &[])
-                .await,
+            store: EntityStore::new(
+                provider,
+                "/guardrails/",
+                "guardrails",
+                Some(validate_guardrail_definition),
+                &[],
+            )
+            .await,
         }
     }
 

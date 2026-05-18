@@ -5,6 +5,7 @@ import { App, defaultConfig } from './setup.js';
 
 export const ADMIN_BASE_URL = 'http://127.0.0.1:3001';
 export const ADMIN_PREFIX = '/aisix/admin';
+export const GUARDRAILS_URL = '/guardrails';
 export const MODELS_URL = '/models';
 export const POLICIES_URL = '/policies';
 export const PROVIDERS_URL = '/providers';

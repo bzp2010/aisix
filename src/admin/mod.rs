@@ -1,4 +1,5 @@
 mod apikeys;
+mod guardrails;
 mod models;
 mod playground;
 mod policies;
@@ -38,6 +39,7 @@ pub const PATH_PREFIX: &str = "/aisix/admin";
     tags(
         (name = models::OPENAPI_TAG, description = "Admin API for managing AI models"),
         (name = apikeys::OPENAPI_TAG, description = "Admin API for managing API keys"),
+        (name = guardrails::OPENAPI_TAG, description = "Admin API for managing guardrails"),
         (name = policies::OPENAPI_TAG, description = "Admin API for managing guardrail policies"),
         (name = providers::OPENAPI_TAG, description = "Admin API for managing AI providers")
     ),
@@ -61,6 +63,11 @@ pub const PATH_PREFIX: &str = "/aisix/admin";
         apikeys::post,
         apikeys::put,
         apikeys::delete,
+        guardrails::list,
+        guardrails::get,
+        guardrails::post,
+        guardrails::put,
+        guardrails::delete,
         policies::list,
         policies::get,
         policies::post,
@@ -144,6 +151,16 @@ pub fn create_router(state: AppState) -> Result<Router> {
                         .route(
                             "/apikeys/{id}",
                             get(apikeys::get).put(apikeys::put).delete(apikeys::delete),
+                        ),
+                )
+                .merge(
+                    Router::new()
+                        .route("/guardrails", get(guardrails::list).post(guardrails::post))
+                        .route(
+                            "/guardrails/{id}",
+                            get(guardrails::get)
+                                .put(guardrails::put)
+                                .delete(guardrails::delete),
                         ),
                 )
                 .merge(
