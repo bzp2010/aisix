@@ -1,4 +1,8 @@
-import { proxyPost } from '../../utils/proxy.js';
+import { parseSseDataEvents, proxyPost } from '../../utils/proxy.js';
+import {
+  expectStreamMatchesAssistantText,
+  expectStreamStopsBeforeDone,
+} from '../../utils/stream-assert.js';
 import {
   type RegexGuardrailFixture,
   setupOpenAiRegexGuardrailFixture,
@@ -105,5 +109,133 @@ describe('proxy guardrail /v1/chat/completions', () => {
         }
       ).messages[0]?.content,
     ).toBe('safe prompt for output guardrail');
+  });
+
+  test('output regex guardrail blocks matched upstream streamed response', async () => {
+    const resp = await proxyPost(
+      '/v1/chat/completions',
+      {
+        model: fixture?.outputGuardedModelName,
+        stream: true,
+        messages: [
+          {
+            role: 'user',
+            content: 'safe prompt for streamed output guardrail',
+          },
+        ],
+      },
+      AUTHORIZED_KEY,
+      { responseType: 'text' },
+    );
+
+    expect(resp.status).toBe(200);
+    expect(String(resp.headers['content-type'])).toContain('text/event-stream');
+
+    const events = expectStreamStopsBeforeDone(String(resp.data));
+    const payloads = parseSseDataEvents(String(resp.data)).map(
+      (item) =>
+        JSON.parse(item) as {
+          error?: {
+            message?: string;
+            type?: string;
+            code?: string;
+          };
+        },
+    );
+
+    expect(events).toHaveLength(1);
+    expect(payloads[0]?.error?.type).toBe('invalid_request_error');
+    expect(payloads[0]?.error?.code).toBe('gateway_error');
+    expect(payloads[0]?.error?.message).toContain(
+      'guardrail regex blocked output',
+    );
+    expect(payloads[0]?.error?.message).toContain(
+      'blocked by regex output guardrail',
+    );
+
+    const recorded = fixture?.upstream.takeRecordedRequests() ?? [];
+    expect(recorded).toHaveLength(1);
+  });
+
+  test('approved streamed output replays original chunks after guardrail check', async () => {
+    fixture?.upstream.configure({
+      streamEvents: [
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'safe ' },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'streamed response' },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 8,
+            total_tokens: 18,
+          },
+        },
+        '[DONE]',
+      ],
+    });
+
+    const resp = await proxyPost(
+      '/v1/chat/completions',
+      {
+        model: fixture?.outputGuardedModelName,
+        stream: true,
+        messages: [
+          { role: 'user', content: 'safe prompt for streamed output replay' },
+        ],
+      },
+      AUTHORIZED_KEY,
+      { responseType: 'text' },
+    );
+
+    expect(resp.status).toBe(200);
+    expect(String(resp.headers['content-type'])).toContain('text/event-stream');
+    expectStreamMatchesAssistantText(
+      String(resp.data),
+      'safe streamed response',
+    );
+
+    const recorded = fixture?.upstream.takeRecordedRequests() ?? [];
+    expect(recorded).toHaveLength(1);
   });
 });

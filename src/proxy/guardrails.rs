@@ -9,6 +9,8 @@ use aisix_guardrail::{
 use async_trait::async_trait;
 use thiserror::Error;
 
+pub(crate) mod streaming;
+
 use crate::{
     config::entities::{Model, ResourceEntry, ResourceRegistry, guardrails::GuardrailConfig},
     gateway::{

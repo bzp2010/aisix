@@ -169,11 +169,25 @@ impl FormatHandlerAdapter for MessagesAdapter {
         Ok(())
     }
 
+    fn guardrail_stream_output_payload(
+        _lifecycle_state: &Self::LifecycleState,
+        collector: &Self::Collector,
+    ) -> Result<Option<crate::guardrail::traits::GuardrailCheckPayload>, Self::Error> {
+        let payload = output_guardrail_payload_from_chat_messages(&collector.output_messages())
+            .map(crate::guardrail::traits::GuardrailCheckPayload::Output)
+            .map_err(bridge_error)?;
+        Ok(Some(payload))
+    }
+
     fn serialize_stream_item(chunk: &Self::StreamChunk) -> SseEvent {
         serialize_stream_event(chunk)
     }
 
     fn stream_error_event(error: &GatewayError) -> Option<SseEvent> {
+        Some(anthropic_error_sse_event(error.to_string()))
+    }
+
+    fn lifecycle_error_event(error: &Self::Error) -> Option<SseEvent> {
         Some(anthropic_error_sse_event(error.to_string()))
     }
 }

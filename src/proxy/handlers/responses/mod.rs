@@ -18,6 +18,7 @@ use span_attributes::{
 };
 pub use types::ResponsesError;
 
+use super::FormatHandlerAdapter;
 use crate::{
     gateway::{
         error::GatewayError,
@@ -41,8 +42,6 @@ use crate::{
         hooks::RequestContext,
     },
 };
-
-use super::FormatHandlerAdapter;
 
 fn serialize_stream_event(event: &ResponsesApiStreamEvent) -> SseEvent {
     let mut sse_event =
@@ -111,9 +110,10 @@ impl FormatHandlerAdapter for ResponsesAdapter {
         lifecycle_state: &Self::LifecycleState,
         _request: &Self::Request,
     ) -> Result<Option<crate::guardrail::traits::GuardrailCheckPayload>, Self::Error> {
-        let payload = input_guardrail_payload_from_chat_messages(&lifecycle_state.merged_input_messages)
-            .map(crate::guardrail::traits::GuardrailCheckPayload::Input)
-            .map_err(bridge_error)?;
+        let payload =
+            input_guardrail_payload_from_chat_messages(&lifecycle_state.merged_input_messages)
+                .map(crate::guardrail::traits::GuardrailCheckPayload::Input)
+                .map_err(bridge_error)?;
         Ok(Some(payload))
     }
 
@@ -122,9 +122,10 @@ impl FormatHandlerAdapter for ResponsesAdapter {
         request: &mut Self::Request,
         rewrite: crate::guardrail::traits::GuardrailCheckPayload,
     ) -> Result<(), Self::Error> {
-        let messages = input_payload_to_chat_messages(&input_payload_from_check_payload(rewrite)
-            .map_err(bridge_error)?)
-            .map_err(bridge_error)?;
+        let messages = input_payload_to_chat_messages(
+            &input_payload_from_check_payload(rewrite).map_err(bridge_error)?,
+        )
+        .map_err(bridge_error)?;
         rewrite_request_from_messages(lifecycle_state, request, messages)?;
         Ok(())
     }
@@ -145,11 +146,22 @@ impl FormatHandlerAdapter for ResponsesAdapter {
         response: &mut Self::Response,
         rewrite: crate::guardrail::traits::GuardrailCheckPayload,
     ) -> Result<(), Self::Error> {
-        let messages = output_payload_to_chat_messages(&output_payload_from_check_payload(rewrite)
-            .map_err(bridge_error)?)
-            .map_err(bridge_error)?;
+        let messages = output_payload_to_chat_messages(
+            &output_payload_from_check_payload(rewrite).map_err(bridge_error)?,
+        )
+        .map_err(bridge_error)?;
         rewrite_response_from_messages(response, &messages)?;
         Ok(())
+    }
+
+    fn guardrail_stream_output_payload(
+        _lifecycle_state: &Self::LifecycleState,
+        collector: &Self::Collector,
+    ) -> Result<Option<crate::guardrail::traits::GuardrailCheckPayload>, Self::Error> {
+        let payload = output_guardrail_payload_from_chat_messages(&collector.output_messages())
+            .map(crate::guardrail::traits::GuardrailCheckPayload::Output)
+            .map_err(bridge_error)?;
+        Ok(Some(payload))
     }
 
     async fn prepare_lifecycle(

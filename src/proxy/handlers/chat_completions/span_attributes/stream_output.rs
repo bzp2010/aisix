@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use super::message_attributes::{MessageContentView, MessageView, OutputMessageView, ToolCallView};
 use crate::{
-    gateway::types::openai::ChatCompletionChunk,
+    gateway::types::openai::{
+        ChatCompletionChunk, ChatMessage, FunctionCall, MessageContent, ToolCall,
+    },
     proxy::utils::trace::span_message_attributes::output_message_span_properties,
 };
 
@@ -68,6 +70,36 @@ impl StreamOutputCollector {
 
     pub(crate) fn output_message_span_properties(&self) -> Vec<(String, String)> {
         output_message_span_properties(&self.output_message_views())
+    }
+
+    pub(crate) fn output_messages(&self) -> Vec<ChatMessage> {
+        self.choices
+            .values()
+            .map(|choice| ChatMessage {
+                role: choice.role.clone().unwrap_or_else(|| "assistant".into()),
+                content: (!choice.content.is_empty())
+                    .then(|| MessageContent::Text(choice.content.clone())),
+                name: None,
+                tool_calls: (!choice.tool_calls.is_empty()).then(|| {
+                    choice
+                        .tool_calls
+                        .values()
+                        .filter_map(|tool_call| {
+                            let name = tool_call.name.clone()?;
+                            Some(ToolCall {
+                                id: tool_call.id.clone().unwrap_or_default(),
+                                r#type: "function".into(),
+                                function: FunctionCall {
+                                    name,
+                                    arguments: tool_call.arguments.clone(),
+                                },
+                            })
+                        })
+                        .collect()
+                }),
+                tool_call_id: None,
+            })
+            .collect()
     }
 
     fn output_message_views(&self) -> Vec<OutputMessageView> {

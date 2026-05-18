@@ -10,6 +10,28 @@ const AUTHORIZED_KEY = 'sk-proxy-guardrail-messages';
 const UPSTREAM_API_KEY = 'upstream-key-guardrail-messages';
 const UPSTREAM_MODEL = 'test-model';
 
+const parseAnthropicSseEvents = (sseBody: string) => {
+  const trimmed = sseBody.trim();
+  if (!trimmed) {
+    return [] as Array<{ event?: string; data: string }>;
+  }
+
+  return trimmed.split(/\r?\n\r?\n/).map((block) => {
+    const lines = block
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return {
+      event: lines.find((line) => line.startsWith('event: '))?.slice(7),
+      data: lines
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => line.slice(6))
+        .join('\n'),
+    };
+  });
+};
+
 describe('proxy guardrail /v1/messages', () => {
   let fixture: RegexGuardrailFixture | undefined;
 
@@ -105,5 +127,139 @@ describe('proxy guardrail /v1/messages', () => {
         }
       ).messages[0]?.content,
     ).toBe('safe prompt for output guardrail');
+  });
+
+  test('output regex guardrail blocks matched streamed messages response', async () => {
+    const resp = await proxyPost(
+      '/v1/messages',
+      {
+        model: fixture?.outputGuardedModelName,
+        max_tokens: 256,
+        stream: true,
+        messages: [
+          {
+            role: 'user',
+            content: 'safe prompt for streamed output guardrail',
+          },
+        ],
+      },
+      AUTHORIZED_KEY,
+      { responseType: 'text' },
+    );
+
+    expect(resp.status).toBe(200);
+    expect(String(resp.headers['content-type'])).toContain('text/event-stream');
+
+    const events = parseAnthropicSseEvents(String(resp.data));
+    expect(events).toHaveLength(1);
+    expect(events[0]?.event).toBe('error');
+
+    const payload = JSON.parse(events[0]?.data ?? '{}') as {
+      type?: string;
+      error?: { type?: string; message?: string };
+    };
+    expect(payload.type).toBe('error');
+    expect(payload.error?.type).toBe('api_error');
+    expect(payload.error?.message).toContain('guardrail regex blocked output');
+    expect(payload.error?.message).toContain(
+      'blocked by regex output guardrail',
+    );
+
+    const recorded = fixture?.upstream.takeRecordedRequests() ?? [];
+    expect(recorded).toHaveLength(1);
+  });
+
+  test('approved streamed messages output replays original anthropic events', async () => {
+    fixture?.upstream.configure({
+      streamEvents: [
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'safe ' },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'streamed response' },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-e2e-mock',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: UPSTREAM_MODEL,
+          choices: [],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 8,
+            total_tokens: 18,
+          },
+        },
+        '[DONE]',
+      ],
+    });
+
+    const resp = await proxyPost(
+      '/v1/messages',
+      {
+        model: fixture?.outputGuardedModelName,
+        max_tokens: 256,
+        stream: true,
+        messages: [
+          { role: 'user', content: 'safe prompt for streamed output replay' },
+        ],
+      },
+      AUTHORIZED_KEY,
+      { responseType: 'text' },
+    );
+
+    expect(resp.status).toBe(200);
+    expect(String(resp.headers['content-type'])).toContain('text/event-stream');
+
+    const events = parseAnthropicSseEvents(String(resp.data));
+    expect(events[0]?.event).toBe('message_start');
+    expect(events.some((event) => event.event === 'content_block_delta')).toBe(
+      true,
+    );
+    expect(events.some((event) => event.event === 'message_delta')).toBe(true);
+    expect(events.at(-1)?.event).toBe('message_stop');
+
+    const streamedText = events
+      .filter((event) => event.event === 'content_block_delta')
+      .map((event) => JSON.parse(event.data) as { delta?: { text?: string } })
+      .map((event) => event.delta?.text ?? '')
+      .join('');
+    expect(streamedText).toBe('safe streamed response');
+
+    const recorded = fixture?.upstream.takeRecordedRequests() ?? [];
+    expect(recorded).toHaveLength(1);
   });
 });

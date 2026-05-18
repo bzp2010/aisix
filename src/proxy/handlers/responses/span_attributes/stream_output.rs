@@ -2,10 +2,17 @@ use std::collections::BTreeMap;
 
 use super::message_attributes::output_message_views_from_output_items;
 use crate::{
-    gateway::types::openai::responses::{
-        ResponsesApiResponse, ResponsesApiStreamEvent, ResponsesOutputContent, ResponsesOutputItem,
+    gateway::types::openai::{
+        ChatMessage,
+        responses::{
+            ResponsesApiResponse, ResponsesApiStreamEvent, ResponsesOutputContent,
+            ResponsesOutputItem,
+        },
     },
-    proxy::utils::trace::span_message_attributes::output_message_span_properties,
+    proxy::{
+        handlers::responses::runtime::response_output_to_chat_messages,
+        utils::trace::span_message_attributes::output_message_span_properties,
+    },
 };
 
 #[derive(Default)]
@@ -114,6 +121,15 @@ impl StreamOutputCollector {
 
         let output: Vec<_> = self.items.values().cloned().collect();
         output_message_span_properties(&output_message_views_from_output_items(&output))
+    }
+
+    pub(crate) fn output_messages(&self) -> Vec<ChatMessage> {
+        if let Some(response) = &self.completed_response {
+            return response_output_to_chat_messages(&response.output);
+        }
+
+        let output: Vec<_> = self.items.values().cloned().collect();
+        response_output_to_chat_messages(&output)
     }
 
     fn sync_response_output(&mut self, response: &ResponsesApiResponse) {

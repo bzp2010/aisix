@@ -5,7 +5,10 @@ use super::message_attributes::{
     message_content_view_from_content_parts,
 };
 use crate::{
-    gateway::types::anthropic::{AnthropicContentBlock, AnthropicStreamEvent, ContentDelta},
+    gateway::types::{
+        anthropic::{AnthropicContentBlock, AnthropicStreamEvent, ContentDelta},
+        openai::{ChatMessage, ContentPart, FunctionCall, ImageUrl, MessageContent, ToolCall},
+    },
     proxy::utils::trace::span_message_attributes::output_message_span_properties,
 };
 
@@ -103,6 +106,60 @@ impl StreamOutputCollector {
 
     pub(crate) fn output_message_span_properties(&self) -> Vec<(String, String)> {
         output_message_span_properties(&self.output_message_views())
+    }
+
+    pub(crate) fn output_messages(&self) -> Vec<ChatMessage> {
+        if self.role.is_none() && self.blocks.is_empty() {
+            return Vec::new();
+        }
+
+        let mut content_parts = Vec::new();
+        let mut tool_calls = Vec::new();
+
+        for block in self.blocks.values() {
+            match block {
+                StreamOutputBlock::Text(text) if !text.is_empty() => {
+                    content_parts.push(ContentPart::Text { text: text.clone() });
+                }
+                StreamOutputBlock::ImageUrl { url } => {
+                    content_parts.push(ContentPart::ImageUrl {
+                        image_url: ImageUrl {
+                            url: url.clone(),
+                            detail: None,
+                        },
+                    });
+                }
+                StreamOutputBlock::ToolUse {
+                    id,
+                    name,
+                    arguments,
+                } if !name.is_empty() => {
+                    tool_calls.push(ToolCall {
+                        id: id.clone().unwrap_or_default(),
+                        r#type: "function".into(),
+                        function: FunctionCall {
+                            name: name.clone(),
+                            arguments: arguments.clone(),
+                        },
+                    });
+                }
+                StreamOutputBlock::Text(_) | StreamOutputBlock::ToolUse { .. } => {}
+            }
+        }
+
+        let content = match content_parts.as_slice() {
+            [] => None,
+            [ContentPart::Text { text }] => Some(MessageContent::Text(text.clone())),
+            _ => Some(MessageContent::Parts(content_parts)),
+        };
+
+        vec![ChatMessage {
+            role: self.role.clone().unwrap_or_else(|| "assistant".into()),
+            content,
+            name: None,
+            tool_calls: (!tool_calls.is_empty()).then_some(tool_calls),
+            tool_call_id: None,
+        }]
     }
 
     fn output_message_views(&self) -> Vec<OutputMessageView> {

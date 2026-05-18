@@ -5,6 +5,7 @@ use axum::response::sse::Event as SseEvent;
 use fastrace::Span;
 use opentelemetry_semantic_conventions::attribute::GEN_AI_RESPONSE_FINISH_REASONS;
 use reqwest::Url;
+use serde_json::json;
 use span_attributes::{
     StreamOutputCollector, chunk_span_properties, request_span_properties, response_span_properties,
 };
@@ -29,6 +30,19 @@ use crate::{
 };
 
 pub(crate) struct ChatCompletionsAdapter;
+
+fn openai_error_sse_event(message: String) -> SseEvent {
+    SseEvent::default().data(
+        json!({
+            "error": {
+                "message": message,
+                "type": "invalid_request_error",
+                "code": "gateway_error",
+            }
+        })
+        .to_string(),
+    )
+}
 
 impl FormatHandlerAdapter for ChatCompletionsAdapter {
     type Format = OpenAIChatFormat;
@@ -153,6 +167,24 @@ impl FormatHandlerAdapter for ChatCompletionsAdapter {
         }
 
         Ok(())
+    }
+
+    fn guardrail_stream_output_payload(
+        _lifecycle_state: &Self::LifecycleState,
+        collector: &Self::Collector,
+    ) -> Result<Option<crate::guardrail::traits::GuardrailCheckPayload>, Self::Error> {
+        let payload = output_guardrail_payload_from_chat_messages(&collector.output_messages())
+            .map(crate::guardrail::traits::GuardrailCheckPayload::Output)
+            .map_err(bridge_error)?;
+        Ok(Some(payload))
+    }
+
+    fn lifecycle_error_event(error: &Self::Error) -> Option<SseEvent> {
+        let message = match error {
+            ChatCompletionError::GatewayError(err) => err.to_string(),
+            _ => error.to_string(),
+        };
+        Some(openai_error_sse_event(message))
     }
 
     fn end_of_stream_event(saw_item: bool) -> Option<SseEvent> {

@@ -1,4 +1,4 @@
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use axum::{
@@ -20,7 +20,6 @@ use tokio::{
 
 use crate::{
     config::entities::{Model, ResourceEntry},
-    guardrail::traits::{GuardrailCheckPayload, GuardrailOutcome},
     gateway::{
         error::GatewayError,
         traits::{ChatFormat, ProviderCapabilities},
@@ -29,9 +28,16 @@ use crate::{
             response::{ChatResponse, ChatResponseStream},
         },
     },
+    guardrail::traits::{GuardrailCheckPayload, GuardrailOutcome},
     proxy::{
         AppState,
-        guardrails::{ConfiguredGuardrailRuntime, resolve_model_guardrails},
+        guardrails::{
+            ConfiguredGuardrailRuntime, resolve_model_guardrails,
+            streaming::{
+                StreamGuardrailDecision, WholeResponseReplayAction, WholeResponseReplayDriver,
+                WholeResponseReplayFinalize,
+            },
+        },
         hooks::{
             self, RequestContext, authorization::AuthorizationError, rate_limit::RateLimitError,
         },
@@ -55,13 +61,14 @@ pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
         >;
     type Request: Sync;
     type Response: Serialize;
-    type StreamChunk: Serialize + Send + 'static;
+    type StreamChunk: Clone + Serialize + Send + 'static;
     type Error: IntoResponse
         + std::fmt::Display
         + From<AuthorizationError>
         + From<RateLimitError>
         + From<GatewayError>
-        + From<Elapsed>;
+        + From<Elapsed>
+        + Send;
     type Collector: Default + Send + 'static;
     type LifecycleState: Default + Send + 'static;
 
@@ -115,6 +122,13 @@ pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
         _rewrite: GuardrailCheckPayload,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+
+    fn guardrail_stream_output_payload(
+        _lifecycle_state: &Self::LifecycleState,
+        _collector: &Self::Collector,
+    ) -> Result<Option<GuardrailCheckPayload>, Self::Error> {
+        Ok(None)
     }
 
     async fn prepare_lifecycle(
@@ -254,12 +268,19 @@ where
             mut response,
             usage,
         })) => {
-            apply_output_guardrails::<A>(
+            let output_guardrail_result = apply_output_guardrails::<A>(
                 &configured_guardrails,
                 &mut lifecycle_state,
                 &mut response,
             )
-            .await?;
+            .await;
+            apply_span_properties(
+                &span,
+                output_guardrail_failure_span_properties(&output_guardrail_result, || {
+                    A::response_span_properties(&response, &usage)
+                }),
+            );
+            output_guardrail_result?;
             A::handle_complete_response(
                 &state,
                 &mut request_ctx,
@@ -274,6 +295,7 @@ where
         Ok(Ok(ChatResponse::Stream { stream, usage_rx })) => {
             handle_stream_response::<A>(
                 state,
+                configured_guardrails,
                 stream,
                 usage_rx,
                 &mut request_ctx,
@@ -361,6 +383,72 @@ where
     }
 
     Ok(())
+}
+
+async fn apply_stream_output_guardrails<A>(
+    guardrails: &[Box<dyn ConfiguredGuardrailRuntime>],
+    payload: &GuardrailCheckPayload,
+) -> Result<(), A::Error>
+where
+    A: FormatHandlerAdapter,
+{
+    for guardrail in guardrails {
+        let Some(outcome) = guardrail.check(payload).await? else {
+            continue;
+        };
+
+        match outcome {
+            GuardrailOutcome::Allow => {}
+            GuardrailOutcome::Rewrite(_) => {
+                return Err(GatewayError::Validation(format!(
+                    "guardrail {} requested streaming output rewrite, which is not supported yet",
+                    guardrail.name()
+                ))
+                .into());
+            }
+            GuardrailOutcome::Block { reason } => {
+                return Err(GatewayError::Validation(format!(
+                    "guardrail {} blocked output: {}",
+                    guardrail.name(),
+                    reason
+                ))
+                .into());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn require_stream_output_guardrail_payload(
+    payload: Option<GuardrailCheckPayload>,
+) -> Result<GuardrailCheckPayload, GatewayError> {
+    payload.ok_or_else(|| {
+        GatewayError::Internal(
+            "stream output guardrails were enabled, but the adapter did not provide a stream output payload"
+                .into(),
+        )
+    })
+}
+
+fn has_output_guardrails(guardrails: &[Box<dyn ConfiguredGuardrailRuntime>]) -> bool {
+    guardrails
+        .iter()
+        .any(|guardrail| guardrail.supports_stage(crate::guardrail::traits::GuardrailStage::Output))
+}
+
+fn output_guardrail_failure_span_properties<E, F>(
+    result: &Result<(), E>,
+    properties: F,
+) -> Vec<(String, String)>
+where
+    F: FnOnce() -> Vec<(String, String)>,
+{
+    if result.is_err() {
+        return properties();
+    }
+
+    Vec::new()
 }
 
 async fn handle_regular_response<A>(
@@ -486,8 +574,28 @@ where
     A::handle_stream_success(state, request_ctx, lifecycle_state, None).await
 }
 
+async fn record_first_stream_output_emit<A>(
+    request_ctx: &mut RequestContext,
+    span: &Span,
+    first_output_arrived: &mut bool,
+    starts_output: bool,
+) where
+    A: FormatHandlerAdapter,
+{
+    if *first_output_arrived || !starts_output {
+        return;
+    }
+
+    *first_output_arrived = true;
+    hooks::observability::record_first_token_latency(request_ctx).await;
+    span.add_event(
+        TraceEvent::new("first token arrived").with_property(|| ("kind", "first_token_arrived")),
+    );
+}
+
 async fn handle_stream_response<A>(
     state: AppState,
+    configured_guardrails: Vec<Box<dyn ConfiguredGuardrailRuntime>>,
     stream: ChatResponseStream<AdapterFormat<A>>,
     usage_rx: oneshot::Receiver<Usage>,
     request_ctx: &mut RequestContext,
@@ -501,9 +609,13 @@ where
 
     let stream_request_ctx = request_ctx.clone();
     let stream_state = state.clone();
+    let replay_driver =
+        WholeResponseReplayDriver::new(has_output_guardrails(&configured_guardrails));
+    let configured_guardrails = Arc::new(configured_guardrails);
     let sse_stream = futures::stream::unfold(
         (
             stream_state,
+            configured_guardrails,
             stream,
             span,
             stream_request_ctx,
@@ -511,28 +623,33 @@ where
             false,
             Some(usage_rx),
             AdapterCollector::<A>::default(),
+            AdapterCollector::<A>::default(),
             false,
             Some(lifecycle_state),
+            replay_driver,
         ),
         |(
             state,
+            configured_guardrails,
             mut stream,
             span,
             mut request_ctx,
             should_terminate,
             saw_item,
             mut usage_rx,
+            mut guardrail_output_collector,
             mut output_collector,
             mut first_output_arrived,
             mut lifecycle_state,
+            mut replay_driver,
         )| async move {
             if should_terminate {
                 drop(span);
                 return None;
             }
 
-            match stream.next().await {
-                Some(Ok(mut chunk)) => {
+            loop {
+                if let Some(mut chunk) = replay_driver.take_replay_chunk() {
                     if let Some(lifecycle_state) = lifecycle_state.as_mut() {
                         A::handle_stream_item(
                             &state,
@@ -542,74 +659,38 @@ where
                         );
                     }
 
+                    record_first_stream_output_emit::<A>(
+                        &mut request_ctx,
+                        &span,
+                        &mut first_output_arrived,
+                        A::starts_output(&chunk),
+                    )
+                    .await;
+
                     A::record_stream_item(&mut output_collector, &chunk);
-
-                    let now_starts_output = !first_output_arrived && A::starts_output(&chunk);
-                    if now_starts_output {
-                        first_output_arrived = true;
-                        hooks::observability::record_first_token_latency(&mut request_ctx).await;
-                        span.add_event(
-                            TraceEvent::new("first token arrived")
-                                .with_property(|| ("kind", "first_token_arrived")),
-                        );
-                    }
-
                     A::apply_chunk_span_properties(&span, &chunk, !saw_item);
 
-                    Some((
+                    break Some((
                         Ok::<SseEvent, Infallible>(A::serialize_stream_item(&chunk)),
                         (
                             state,
+                            configured_guardrails,
                             stream,
                             span,
                             request_ctx,
                             false,
                             true,
                             usage_rx,
+                            guardrail_output_collector,
                             output_collector,
                             first_output_arrived,
                             lifecycle_state,
+                            replay_driver,
                         ),
-                    ))
+                    ));
                 }
-                Some(Err(err)) => {
-                    error!("Gateway stream error: {}", err);
-                    span.add_property(|| ("error.type", "stream_error"));
-                    span.add_properties(|| A::output_message_span_properties(&output_collector));
 
-                    if let Some(lifecycle_state) = lifecycle_state.take() {
-                        if let Err(lifecycle_err) =
-                            A::handle_stream_failure(&state, &mut request_ctx, lifecycle_state)
-                                .await
-                        {
-                            error!("Stream failure lifecycle error: {}", lifecycle_err);
-                        }
-                    }
-
-                    finalize_stream_usage_observation(&mut request_ctx, &mut usage_rx, &span).await;
-
-                    if let Some(event) = A::stream_error_event(&err) {
-                        Some((
-                            Ok(event),
-                            (
-                                state,
-                                stream,
-                                span,
-                                request_ctx,
-                                true,
-                                saw_item,
-                                usage_rx,
-                                output_collector,
-                                first_output_arrived,
-                                lifecycle_state,
-                            ),
-                        ))
-                    } else {
-                        drop(span);
-                        None
-                    }
-                }
-                None => {
+                if replay_driver.is_upstream_finished() {
                     match finalize_stream_success::<A>(
                         &state,
                         &mut request_ctx,
@@ -626,48 +707,248 @@ where
                             span.add_property(|| ("error.type", "stream_success_lifecycle_error"));
 
                             if let Some(event) = A::lifecycle_error_event(&err) {
-                                return Some((
+                                break Some((
                                     Ok(event),
                                     (
                                         state,
+                                        configured_guardrails,
                                         stream,
                                         span,
                                         request_ctx,
                                         true,
                                         saw_item,
                                         usage_rx,
+                                        guardrail_output_collector,
                                         output_collector,
                                         first_output_arrived,
                                         lifecycle_state,
+                                        replay_driver,
                                     ),
                                 ));
                             }
 
                             drop(span);
-                            return None;
+                            break None;
                         }
                     }
 
                     if let Some(event) = A::end_of_stream_event(saw_item) {
-                        Some((
+                        break Some((
                             Ok(event),
                             (
                                 state,
+                                configured_guardrails,
                                 stream,
                                 span,
                                 request_ctx,
                                 true,
                                 saw_item,
                                 usage_rx,
+                                guardrail_output_collector,
                                 output_collector,
                                 first_output_arrived,
                                 lifecycle_state,
+                                replay_driver,
                             ),
-                        ))
-                    } else {
-                        drop(span);
-                        None
+                        ));
                     }
+
+                    drop(span);
+                    break None;
+                }
+
+                match stream.next().await {
+                    Some(Ok(chunk)) => match replay_driver.push_upstream_chunk(chunk) {
+                        WholeResponseReplayAction::Buffered(chunk) => {
+                            A::record_stream_item(&mut guardrail_output_collector, &chunk);
+                            continue;
+                        }
+                        WholeResponseReplayAction::Emit(mut chunk) => {
+                            if let Some(lifecycle_state) = lifecycle_state.as_mut() {
+                                A::handle_stream_item(
+                                    &state,
+                                    &mut request_ctx,
+                                    lifecycle_state,
+                                    &mut chunk,
+                                );
+                            }
+
+                            record_first_stream_output_emit::<A>(
+                                &mut request_ctx,
+                                &span,
+                                &mut first_output_arrived,
+                                A::starts_output(&chunk),
+                            )
+                            .await;
+
+                            A::record_stream_item(&mut output_collector, &chunk);
+                            A::apply_chunk_span_properties(&span, &chunk, !saw_item);
+
+                            break Some((
+                                Ok::<SseEvent, Infallible>(A::serialize_stream_item(&chunk)),
+                                (
+                                    state,
+                                    configured_guardrails,
+                                    stream,
+                                    span,
+                                    request_ctx,
+                                    false,
+                                    true,
+                                    usage_rx,
+                                    guardrail_output_collector,
+                                    output_collector,
+                                    first_output_arrived,
+                                    lifecycle_state,
+                                    replay_driver,
+                                ),
+                            ));
+                        }
+                    },
+                    Some(Err(err)) => {
+                        error!("Gateway stream error: {}", err);
+                        span.add_property(|| ("error.type", "stream_error"));
+                        if replay_driver.is_buffering() {
+                            span.add_properties(|| {
+                                A::output_message_span_properties(&guardrail_output_collector)
+                            });
+                        } else {
+                            span.add_properties(|| {
+                                A::output_message_span_properties(&output_collector)
+                            });
+                        }
+
+                        if let Some(lifecycle_state) = lifecycle_state.take() {
+                            if let Err(lifecycle_err) =
+                                A::handle_stream_failure(&state, &mut request_ctx, lifecycle_state)
+                                    .await
+                            {
+                                error!("Stream failure lifecycle error: {}", lifecycle_err);
+                            }
+                        }
+
+                        finalize_stream_usage_observation(&mut request_ctx, &mut usage_rx, &span)
+                            .await;
+
+                        if let Some(event) = A::stream_error_event(&err) {
+                            break Some((
+                                Ok(event),
+                                (
+                                    state,
+                                    configured_guardrails,
+                                    stream,
+                                    span,
+                                    request_ctx,
+                                    true,
+                                    saw_item,
+                                    usage_rx,
+                                    guardrail_output_collector,
+                                    output_collector,
+                                    first_output_arrived,
+                                    lifecycle_state,
+                                    replay_driver,
+                                ),
+                            ));
+                        }
+
+                        drop(span);
+                        break None;
+                    }
+                    None => match replay_driver.finish_upstream() {
+                        WholeResponseReplayFinalize::NeedsGuardrailCheck => {
+                            let output_guardrail_result =
+                                if let Some(lifecycle_state) = lifecycle_state.as_ref() {
+                                    match A::guardrail_stream_output_payload(
+                                        lifecycle_state,
+                                        &guardrail_output_collector,
+                                    ) {
+                                        Ok(payload) => {
+                                            match require_stream_output_guardrail_payload(payload) {
+                                                Ok(payload) => {
+                                                    apply_stream_output_guardrails::<A>(
+                                                        configured_guardrails.as_ref(),
+                                                        &payload,
+                                                    )
+                                                    .await
+                                                }
+                                                Err(err) => Err(err.into()),
+                                            }
+                                        }
+                                        Err(err) => Err(err),
+                                    }
+                                } else {
+                                    Ok(())
+                                };
+
+                            match output_guardrail_result {
+                                Ok(()) => {
+                                    let decision = replay_driver.approve_buffered();
+                                    debug_assert!(matches!(
+                                        decision,
+                                        StreamGuardrailDecision::Allow { .. }
+                                    ));
+                                    continue;
+                                }
+                                Err(err) => {
+                                    error!("Stream output guardrail error: {}", err);
+                                    span.add_property(|| {
+                                        ("error.type", "stream_output_guardrail_error")
+                                    });
+                                    span.add_properties(|| {
+                                        A::output_message_span_properties(
+                                            &guardrail_output_collector,
+                                        )
+                                    });
+
+                                    if let Some(lifecycle_state) = lifecycle_state.take() {
+                                        if let Err(lifecycle_err) = A::handle_stream_failure(
+                                            &state,
+                                            &mut request_ctx,
+                                            lifecycle_state,
+                                        )
+                                        .await
+                                        {
+                                            error!(
+                                                "Stream failure lifecycle error: {}",
+                                                lifecycle_err
+                                            );
+                                        }
+                                    }
+
+                                    finalize_stream_usage_observation(
+                                        &mut request_ctx,
+                                        &mut usage_rx,
+                                        &span,
+                                    )
+                                    .await;
+
+                                    if let Some(event) = A::lifecycle_error_event(&err) {
+                                        break Some((
+                                            Ok(event),
+                                            (
+                                                state,
+                                                configured_guardrails,
+                                                stream,
+                                                span,
+                                                request_ctx,
+                                                true,
+                                                saw_item,
+                                                usage_rx,
+                                                guardrail_output_collector,
+                                                output_collector,
+                                                first_output_arrived,
+                                                lifecycle_state,
+                                                replay_driver,
+                                            ),
+                                        ));
+                                    }
+
+                                    drop(span);
+                                    break None;
+                                }
+                            }
+                        }
+                        WholeResponseReplayFinalize::Finished => {}
+                    },
                 }
             }
         },
@@ -676,4 +957,80 @@ where
     let mut response = Sse::new(sse_stream).into_response();
     hooks::rate_limit::inject_response_headers(request_ctx, response.headers_mut()).await;
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use pretty_assertions::assert_eq;
+
+    use super::{
+        output_guardrail_failure_span_properties, require_stream_output_guardrail_payload,
+    };
+    use crate::{
+        gateway::error::GatewayError,
+        guardrail::traits::{GuardrailCheckPayload, OutputGuardrailPayload},
+    };
+
+    #[test]
+    fn output_guardrail_failure_span_properties_skips_computation_on_success() {
+        let computed = Cell::new(false);
+
+        let properties =
+            output_guardrail_failure_span_properties(&Ok::<(), &'static str>(()), || {
+                computed.set(true);
+                vec![(
+                    "llm.output_messages.0.message.content".into(),
+                    "hidden".into(),
+                )]
+            });
+
+        assert!(properties.is_empty());
+        assert!(!computed.get());
+    }
+
+    #[test]
+    fn output_guardrail_failure_span_properties_returns_properties_on_error() {
+        let computed = Cell::new(false);
+
+        let properties =
+            output_guardrail_failure_span_properties(&Err::<(), &'static str>("blocked"), || {
+                computed.set(true);
+                vec![(
+                    "llm.output_messages.0.message.content".into(),
+                    "raw upstream output".into(),
+                )]
+            });
+
+        assert_eq!(
+            properties,
+            vec![(
+                "llm.output_messages.0.message.content".into(),
+                "raw upstream output".into(),
+            )]
+        );
+        assert!(computed.get());
+    }
+
+    #[test]
+    fn require_stream_output_guardrail_payload_rejects_missing_payload() {
+        let err = require_stream_output_guardrail_payload(None).unwrap_err();
+
+        assert!(matches!(err, GatewayError::Internal(_)));
+        assert_eq!(
+            err.to_string(),
+            "internal: stream output guardrails were enabled, but the adapter did not provide a stream output payload",
+        );
+    }
+
+    #[test]
+    fn require_stream_output_guardrail_payload_passes_through_present_payload() {
+        let payload = GuardrailCheckPayload::Output(OutputGuardrailPayload::default());
+
+        assert_eq!(
+            require_stream_output_guardrail_payload(Some(payload.clone())).unwrap(),
+            payload,
+        );
+    }
 }
