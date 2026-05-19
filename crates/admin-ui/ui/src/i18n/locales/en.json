@@ -5,6 +5,7 @@
     "playground": "Playground",
     "providers": "Providers",
     "models": "Models",
+    "guardrails": "Guardrails",
     "apiKeys": "API Keys",
     "settings": "Settings"
   },
@@ -60,6 +61,10 @@
     "anthropic": "Anthropic",
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
+    "bedrock": "AWS Bedrock"
+  },
+  "guardrailTypes": {
+    "regex": "Regex",
     "bedrock": "AWS Bedrock"
   },
   "playground": {
@@ -168,6 +173,69 @@
       "rpd": "RPD",
       "rpdHint": "Requests / day",
       "concurrency": "Concurrency"
+    }
+  },
+  "guardrails": {
+    "title": "Guardrails",
+    "addGuardrail": "Add Guardrail",
+    "deleteGuardrail": "Delete Guardrail",
+    "createTitle": "Create guardrail resource",
+    "createDesc": "Required: name, type, config. Config fields depend on the selected guardrail type.",
+    "editTitle": "Edit guardrail resource",
+    "createGuardrail": "Create Guardrail",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "type": "Type",
+      "config": "Config",
+      "action": "Action"
+    },
+    "search": "Search guardrails…",
+    "count_one": "{{count}} guardrail",
+    "count_other": "{{count}} guardrails",
+    "empty": "No guardrails yet.",
+    "emptyAction": "Add one",
+    "errorLoad": "Failed to load guardrails.",
+    "errorLoadSingle": "Failed to load guardrail.",
+    "deleteFailed": "Failed to delete guardrail.",
+    "bulkDeleteFailed": "Deleted {{successCount}} guardrails; {{failureCount}} deletions failed: {{details}}",
+    "deleteConfirm": "Delete guardrail \"{{id}}\"?",
+    "regexSummary": "Pattern: {{pattern}}",
+    "bedrockSummary": "{{identifier}} · v{{version}} · {{region}}",
+    "form": {
+      "basicInfo": "Basic Information",
+      "nameLabel": "Name *",
+      "namePlaceholder": "e.g. tenant-a-output-guardrail",
+      "nameRequired": "Please enter a guardrail name before saving.",
+      "typeLabel": "Guardrail Type *",
+      "typePlaceholder": "Select a guardrail type",
+      "config": "Guardrail Config",
+      "patternLabel": "Regex Pattern *",
+      "patternPlaceholder": "e.g. secret token",
+      "patternRequired": "Please enter a regex pattern.",
+      "blockReasonLabel": "Block Reason",
+      "blockReasonPlaceholder": "Optional reason returned to the client",
+      "identifierLabel": "Guardrail Identifier *",
+      "identifierPlaceholder": "e.g. gr-123abc",
+      "identifierRequired": "Please enter the Bedrock guardrail identifier.",
+      "versionLabel": "Version *",
+      "versionPlaceholder": "e.g. 1",
+      "versionRequired": "Please enter the Bedrock guardrail version.",
+      "regionLabel": "AWS Region *",
+      "regionHint": "Used to choose the default Bedrock runtime endpoint.",
+      "regionRequired": "Please enter an AWS region.",
+      "accessKeyIdLabel": "AWS Access Key ID *",
+      "accessKeyIdRequired": "Please enter the AWS access key ID.",
+      "secretAccessKeyLabel": "AWS Secret Access Key *",
+      "secretAccessKeyPlaceholder": "AWS secret access key",
+      "secretAccessKeyRequired": "Please enter the AWS secret access key.",
+      "sessionTokenLabel": "AWS Session Token",
+      "sessionTokenHint": "Optional temporary credential when using STS or assumed roles.",
+      "sessionTokenPlaceholder": "Optional temporary credential",
+      "endpointLabel": "Bedrock Endpoint Override",
+      "endpointHint": "Leave blank to use the standard runtime endpoint for the selected region.",
+      "showSecret": "Show value",
+      "hideSecret": "Hide value"
     }
   },
   "providers": {

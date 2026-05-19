@@ -37,6 +37,37 @@ export interface Model {
   rate_limit?: RateLimit;
 }
 
+export const GUARDRAIL_TYPE_VARIANTS = ['regex', 'bedrock'] as const;
+
+export type GuardrailType = (typeof GUARDRAIL_TYPE_VARIANTS)[number];
+
+export interface RegexGuardrailConfig {
+  pattern: string;
+  block_reason?: string;
+}
+
+export interface BedrockGuardrailConfig {
+  identifier: string;
+  version: string;
+  region: string;
+  access_key_id: string;
+  secret_access_key: string;
+  session_token?: string;
+  endpoint?: string;
+}
+
+export type Guardrail =
+  | {
+      name: string;
+      type: 'regex';
+      config: RegexGuardrailConfig;
+    }
+  | {
+      name: string;
+      type: 'bedrock';
+      config: BedrockGuardrailConfig;
+    };
+
 export const PROVIDER_TYPE_VARIANTS = [
   'openai',
   'openrouter',

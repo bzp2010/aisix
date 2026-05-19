@@ -2,6 +2,7 @@ import type {
   ApiError,
   ApiKey,
   DeleteResponse,
+  Guardrail,
   ItemResponse,
   ListResponse,
   Model,
@@ -104,4 +105,22 @@ export const apiKeysApi = {
 
   delete: (adminKey: string, id: string) =>
     request<DeleteResponse>('DELETE', `/apikeys/${id}`, adminKey),
+};
+
+// ── Guardrails ─────────────────────────────────────────────────────────────────
+export const guardrailsApi = {
+  list: (adminKey: string) =>
+    request<ListResponse<Guardrail>>('GET', '/guardrails', adminKey),
+
+  get: (adminKey: string, id: string) =>
+    request<ItemResponse<Guardrail>>('GET', `/guardrails/${id}`, adminKey),
+
+  create: (adminKey: string, data: Guardrail) =>
+    request<ItemResponse<Guardrail>>('POST', '/guardrails', adminKey, data),
+
+  update: (adminKey: string, id: string, data: Guardrail) =>
+    request<ItemResponse<Guardrail>>('PUT', `/guardrails/${id}`, adminKey, data),
+
+  delete: (adminKey: string, id: string) =>
+    request<DeleteResponse>('DELETE', `/guardrails/${id}`, adminKey),
 };

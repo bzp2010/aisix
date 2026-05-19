@@ -5,6 +5,7 @@
     "playground": "Playground",
     "providers": "模型提供商",
     "models": "模型",
+    "guardrails": "Guardrail",
     "apiKeys": "API 密钥",
     "settings": "设置"
   },
@@ -60,6 +61,10 @@
     "anthropic": "Anthropic",
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
+    "bedrock": "AWS Bedrock"
+  },
+  "guardrailTypes": {
+    "regex": "Regex",
     "bedrock": "AWS Bedrock"
   },
   "playground": {
@@ -168,6 +173,69 @@
       "rpd": "RPD",
       "rpdHint": "每天请求数",
       "concurrency": "并发"
+    }
+  },
+  "guardrails": {
+    "title": "Guardrail",
+    "addGuardrail": "添加 Guardrail",
+    "deleteGuardrail": "删除 Guardrail",
+    "createTitle": "创建 Guardrail 资源",
+    "createDesc": "必填：name、type、config。config 字段会随 Guardrail 类型变化。",
+    "editTitle": "编辑 Guardrail 资源",
+    "createGuardrail": "创建 Guardrail",
+    "columns": {
+      "id": "ID",
+      "name": "名称",
+      "type": "类型",
+      "config": "配置",
+      "action": "操作"
+    },
+    "search": "搜索 Guardrail…",
+    "count_one": "{{count}} 个 Guardrail",
+    "count_other": "{{count}} 个 Guardrail",
+    "empty": "暂无 Guardrail。",
+    "emptyAction": "添加一个",
+    "errorLoad": "加载 Guardrail 失败。",
+    "errorLoadSingle": "加载 Guardrail 失败。",
+    "deleteFailed": "删除 Guardrail 失败。",
+    "bulkDeleteFailed": "已删除 {{successCount}} 个 Guardrail，{{failureCount}} 个删除失败：{{details}}",
+    "deleteConfirm": "确认删除 Guardrail \"{{id}}\"？",
+    "regexSummary": "模式：{{pattern}}",
+    "bedrockSummary": "{{identifier}} · v{{version}} · {{region}}",
+    "form": {
+      "basicInfo": "基础信息",
+      "nameLabel": "名称 *",
+      "namePlaceholder": "例如：tenant-a-output-guardrail",
+      "nameRequired": "保存前请先输入 Guardrail 名称。",
+      "typeLabel": "Guardrail 类型 *",
+      "typePlaceholder": "选择 Guardrail 类型",
+      "config": "Guardrail 配置",
+      "patternLabel": "正则表达式 *",
+      "patternPlaceholder": "例如：secret token",
+      "patternRequired": "请输入正则表达式。",
+      "blockReasonLabel": "拦截原因",
+      "blockReasonPlaceholder": "返回给客户端的可选原因",
+      "identifierLabel": "Guardrail Identifier *",
+      "identifierPlaceholder": "例如：gr-123abc",
+      "identifierRequired": "请输入 Bedrock guardrail identifier。",
+      "versionLabel": "Version *",
+      "versionPlaceholder": "例如：1",
+      "versionRequired": "请输入 Bedrock guardrail version。",
+      "regionLabel": "AWS Region *",
+      "regionHint": "用于选择默认的 Bedrock 运行时地址。",
+      "regionRequired": "请输入 AWS Region。",
+      "accessKeyIdLabel": "AWS Access Key ID *",
+      "accessKeyIdRequired": "请输入 AWS Access Key ID。",
+      "secretAccessKeyLabel": "AWS Secret Access Key *",
+      "secretAccessKeyPlaceholder": "AWS secret access key",
+      "secretAccessKeyRequired": "请输入 AWS Secret Access Key。",
+      "sessionTokenLabel": "AWS Session Token",
+      "sessionTokenHint": "使用 STS 或 AssumeRole 临时凭证时可选。",
+      "sessionTokenPlaceholder": "可选的临时凭证",
+      "endpointLabel": "Bedrock Endpoint Override",
+      "endpointHint": "留空则根据所选 Region 使用标准运行时地址。",
+      "showSecret": "显示明文",
+      "hideSecret": "隐藏明文"
     }
   },
   "providers": {
