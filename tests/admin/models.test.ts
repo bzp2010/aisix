@@ -176,4 +176,31 @@ describe('admin models', () => {
     expect(duplicateResp.status).toBe(400);
     expect(duplicateResp.data.error_msg).toBe('Model name already exists');
   });
+
+  test('test_guardrail_ids_rejected', async () => {
+    const auth = bearerAuthHeader(ADMIN_KEY);
+    const providerId = 'legacy-guardrail-provider';
+    const providerResp = await adminPut(
+      `${PROVIDERS_URL}/${providerId}`,
+      {
+        name: providerId,
+        type: 'openai',
+        config: TEST_PROVIDER_CONFIG,
+      },
+      auth,
+    );
+    expect(providerResp.status).toBe(201);
+
+    const createResp = await adminPost(
+      MODELS_URL,
+      {
+        ...buildModelBody('legacy_guardrail_model', providerId),
+        guardrail_ids: ['gr-legacy'],
+      },
+      auth,
+    );
+
+    expect(createResp.status).toBe(400);
+    expect(createResp.data.error_msg).toContain('guardrail_ids');
+  });
 });

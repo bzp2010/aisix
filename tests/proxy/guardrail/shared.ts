@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   MODELS_URL,
+  POLICIES_URL,
   PROVIDERS_URL,
   adminPost,
   adminPut,
@@ -111,7 +112,6 @@ export const setupOpenAiRegexGuardrailFixture = async ({
           name: inputGuardedModelName,
           model: buildModel(upstreamModel),
           provider_id: providerId,
-          guardrail_ids: [inputGuardrailId],
         },
         auth,
       ),
@@ -126,12 +126,55 @@ export const setupOpenAiRegexGuardrailFixture = async ({
           name: outputGuardedModelName,
           model: buildModel(upstreamModel),
           provider_id: providerId,
-          guardrail_ids: [outputGuardrailId],
         },
         auth,
       ),
       201,
       'create output-guarded model',
+    );
+
+    ensureStatus(
+      await adminPost(
+        POLICIES_URL,
+        {
+          name: `${modelPrefix}-input-policy-${randomUUID()}`,
+          when: `model.name == '${inputGuardedModelName}'`,
+          actions: [
+            {
+              type: 'guardrail',
+              config: {
+                stages: ['input'],
+                guardrail_ids: [inputGuardrailId],
+              },
+            },
+          ],
+        },
+        auth,
+      ),
+      201,
+      'create input guardrail policy',
+    );
+
+    ensureStatus(
+      await adminPost(
+        POLICIES_URL,
+        {
+          name: `${modelPrefix}-output-policy-${randomUUID()}`,
+          when: `model.name == '${outputGuardedModelName}'`,
+          actions: [
+            {
+              type: 'guardrail',
+              config: {
+                stages: ['output'],
+                guardrail_ids: [outputGuardrailId],
+              },
+            },
+          ],
+        },
+        auth,
+      ),
+      201,
+      'create output guardrail policy',
     );
 
     ensureStatus(

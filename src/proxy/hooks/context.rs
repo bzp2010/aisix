@@ -15,6 +15,12 @@ struct RequestContextInner {
 }
 
 #[derive(Clone)]
+pub(crate) struct RequestRouteInfo {
+    pub method: String,
+    pub path: String,
+}
+
+#[derive(Clone)]
 pub struct RequestContext {
     inner: Arc<RequestContextInner>,
 }
@@ -27,6 +33,10 @@ impl FromRequestParts<AppState> for RequestContext {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let mut ctx = http::Extensions::new();
+        ctx.insert(RequestRouteInfo {
+            method: parts.method.as_str().to_string(),
+            path: parts.uri.path().to_string(),
+        });
         ctx.insert(parts.extensions.remove::<ResourceEntry<ApiKey>>().expect(
             "Authentication middleware should have inserted ApiKey into request extensions",
         ));

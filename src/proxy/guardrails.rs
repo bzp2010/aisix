@@ -12,7 +12,7 @@ use thiserror::Error;
 pub(crate) mod streaming;
 
 use crate::{
-    config::entities::{Model, ResourceEntry, ResourceRegistry, guardrails::GuardrailConfig},
+    config::entities::guardrails::GuardrailConfig,
     gateway::{
         error::GatewayError,
         types::openai::{
@@ -42,7 +42,7 @@ where
 }
 
 #[async_trait]
-pub(crate) trait ConfiguredGuardrailRuntime: Send + Sync {
+pub(crate) trait ResolvedGuardrail: Send + Sync {
     fn name(&self) -> &'static str;
 
     fn supports_stage(&self, stage: GuardrailStage) -> bool;
@@ -53,19 +53,24 @@ pub(crate) trait ConfiguredGuardrailRuntime: Send + Sync {
     ) -> Result<Option<GuardrailOutcome>, GatewayError>;
 }
 
-struct GuardrailRuntimeHandle<R, C> {
+struct RuntimeResolvedGuardrail<R, C> {
     runtime: R,
     config: C,
+    stage: GuardrailStage,
 }
 
-impl<R, C> GuardrailRuntimeHandle<R, C> {
-    fn new(runtime: R, config: C) -> Self {
-        Self { runtime, config }
+impl<R, C> RuntimeResolvedGuardrail<R, C> {
+    fn new(runtime: R, config: C, stage: GuardrailStage) -> Self {
+        Self {
+            runtime,
+            config,
+            stage,
+        }
     }
 }
 
 #[async_trait]
-impl<R, C> ConfiguredGuardrailRuntime for GuardrailRuntimeHandle<R, C>
+impl<R, C> ResolvedGuardrail for RuntimeResolvedGuardrail<R, C>
 where
     R: GuardrailRuntime<C> + Send + Sync,
     C: Send + Sync,
@@ -76,7 +81,7 @@ where
     }
 
     fn supports_stage(&self, stage: GuardrailStage) -> bool {
-        self.runtime.supports_stage(stage)
+        self.stage == stage && self.runtime.supports_stage(stage)
     }
 
     async fn check(
@@ -213,29 +218,6 @@ pub(crate) fn output_payload_from_check_payload(
     }
 }
 
-pub(crate) fn resolve_model_guardrails(
-    model: &ResourceEntry<Model>,
-    resources: &ResourceRegistry,
-) -> Result<Vec<Box<dyn ConfiguredGuardrailRuntime>>, GatewayError> {
-    // This direct Model -> guardrail lookup is intentionally temporary. The long-term attachment
-    // point should come from policy evaluation so request-time guardrail selection is not encoded
-    // in the model resource itself.
-    model
-        .guardrail_ids
-        .iter()
-        .map(|guardrail_id| {
-            let guardrail = resources
-                .guardrails
-                .get_by_id(guardrail_id)
-                .ok_or_else(|| {
-                    GatewayError::Internal(format!("guardrail {} not found", guardrail_id))
-                })?;
-
-            configured_guardrail_runtime_from_configs(&guardrail.guardrail)
-        })
-        .collect()
-}
-
 #[cfg(test)]
 pub(crate) async fn run_guardrail_check<R, C>(
     runtime: &R,
@@ -272,17 +254,20 @@ where
     run_guardrail_check(runtime, config, payload).await
 }
 
-fn configured_guardrail_runtime_from_configs(
+pub(crate) fn build_resolved_guardrail_for_stage(
     guardrail: &GuardrailConfig,
-) -> Result<Box<dyn ConfiguredGuardrailRuntime>, GatewayError> {
+    stage: GuardrailStage,
+) -> Result<Box<dyn ResolvedGuardrail>, GatewayError> {
     match guardrail {
-        GuardrailConfig::Bedrock(config) => Ok(Box::new(GuardrailRuntimeHandle::new(
+        GuardrailConfig::Bedrock(config) => Ok(Box::new(RuntimeResolvedGuardrail::new(
             BedrockGuardrailRuntime::new(),
             config.clone(),
+            stage,
         ))),
-        GuardrailConfig::Regex(config) => Ok(Box::new(GuardrailRuntimeHandle::new(
+        GuardrailConfig::Regex(config) => Ok(Box::new(RuntimeResolvedGuardrail::new(
             RegexGuardrailRuntime::new(),
             config.clone(),
+            stage,
         ))),
     }
 }
@@ -370,8 +355,8 @@ mod tests {
     use thiserror::Error;
 
     use super::{
-        GuardrailBridgeError, chat_message_to_guardrail_message,
-        configured_guardrail_runtime_from_configs, guardrail_message_to_chat_message,
+        GuardrailBridgeError, build_resolved_guardrail_for_stage,
+        chat_message_to_guardrail_message, guardrail_message_to_chat_message,
         input_guardrail_payload_from_chat_messages, input_payload_from_check_payload,
         input_payload_to_chat_messages, output_guardrail_payload_from_chat_messages,
         output_payload_from_check_payload, output_payload_to_chat_messages,
@@ -631,9 +616,9 @@ mod tests {
     }
 
     #[test]
-    fn configured_guardrail_runtime_from_configs_builds_bedrock_runtime() {
-        let runtime = configured_guardrail_runtime_from_configs(&GuardrailConfig::Bedrock(
-            BedrockGuardrailConfig {
+    fn build_resolved_guardrail_for_stage_builds_bedrock_runtime() {
+        let runtime = build_resolved_guardrail_for_stage(
+            &GuardrailConfig::Bedrock(BedrockGuardrailConfig {
                 identifier: "guardrail-123".into(),
                 version: "1".into(),
                 region: "us-east-1".into(),
@@ -641,23 +626,30 @@ mod tests {
                 secret_access_key: "secret".into(),
                 session_token: None,
                 endpoint: None,
-            },
-        ))
+            }),
+            GuardrailStage::Input,
+        )
         .unwrap();
 
         assert_eq!(runtime.name(), "bedrock");
         assert!(runtime.supports_stage(GuardrailStage::Input));
+        assert!(!runtime.supports_stage(GuardrailStage::Output));
     }
 
     #[test]
-    fn configured_guardrail_runtime_from_configs_builds_regex_runtime() {
-        let runtime = configured_guardrail_runtime_from_configs(&GuardrailConfig::Regex(
-            RegexGuardrailConfig::new("secret", Some("matched blocked content".into())).unwrap(),
-        ))
+    fn build_resolved_guardrail_for_stage_builds_regex_runtime() {
+        let runtime = build_resolved_guardrail_for_stage(
+            &GuardrailConfig::Regex(
+                RegexGuardrailConfig::new("secret", Some("matched blocked content".into()))
+                    .unwrap(),
+            ),
+            GuardrailStage::Output,
+        )
         .unwrap();
 
         assert_eq!(runtime.name(), "regex");
         assert!(runtime.supports_stage(GuardrailStage::Output));
+        assert!(!runtime.supports_stage(GuardrailStage::Input));
     }
 
     #[test]

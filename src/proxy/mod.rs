@@ -3,6 +3,7 @@ mod handlers;
 mod hooks;
 pub(crate) mod message_history;
 mod middlewares;
+mod policies;
 mod provider;
 mod utils;
 
@@ -64,11 +65,7 @@ pub fn create_router(state: AppState) -> Result<Router> {
         .merge(Router::new().route("/v1/models", get(handlers::models::list_models)))
         .route(
             "/v1/chat/completions",
-            post(
-                handlers::format_handler::<
-                    handlers::chat_completions::ChatCompletionsAdapter,
-                >,
-            ),
+            post(handlers::format_handler::<handlers::chat_completions::ChatCompletionsAdapter>),
         )
         .route(
             "/v1/messages",

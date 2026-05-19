@@ -25,6 +25,7 @@ use crate::{
         traits::{ChatFormat, ProviderCapabilities},
         types::{
             common::Usage,
+            openai::ChatMessage,
             response::{ChatResponse, ChatResponseStream},
         },
     },
@@ -32,7 +33,7 @@ use crate::{
     proxy::{
         AppState,
         guardrails::{
-            ConfiguredGuardrailRuntime, resolve_model_guardrails,
+            ResolvedGuardrail, input_payload_from_check_payload, input_payload_to_chat_messages,
             streaming::{
                 StreamGuardrailDecision, WholeResponseReplayAction, WholeResponseReplayDriver,
                 WholeResponseReplayFinalize,
@@ -41,6 +42,7 @@ use crate::{
         hooks::{
             self, RequestContext, authorization::AuthorizationError, rate_limit::RateLimitError,
         },
+        policies::{RequestGuardrailResolution, resolve_request_guardrails, stable_route_format},
         provider::create_provider_instance,
         utils::trace::span_attributes::{apply_span_properties, usage_span_properties},
     },
@@ -59,7 +61,7 @@ pub(crate) trait FormatHandlerAdapter: Send + Sync + 'static {
             Response = Self::Response,
             StreamChunk = Self::StreamChunk,
         >;
-    type Request: Sync;
+    type Request: Sync + Serialize;
     type Response: Serialize;
     type StreamChunk: Clone + Serialize + Send + 'static;
     type Error: IntoResponse
@@ -207,11 +209,9 @@ where
     A: FormatHandlerAdapter,
 {
     hooks::observability::record_start_time(&mut request_ctx).await;
-    hooks::authorization::check(
-        &mut request_ctx,
-        <AdapterFormat<A> as ChatFormat>::extract_model(&request_data).to_owned(),
-    )
-    .await?;
+    let requested_model_name =
+        <AdapterFormat<A> as ChatFormat>::extract_model(&request_data).to_owned();
+    hooks::authorization::check(&mut request_ctx, requested_model_name.clone()).await?;
     hooks::rate_limit::pre_check(&mut request_ctx).await?;
 
     let model = request_ctx
@@ -221,7 +221,6 @@ where
         .cloned()
         .ok_or_else(A::missing_model_error)?;
 
-    A::set_model(&mut request_data, model.model.clone());
     let timeout = model.timeout.map(Duration::from_millis);
 
     let gateway = state.gateway();
@@ -229,14 +228,32 @@ where
     let provider = model.provider(resources.as_ref()).ok_or_else(|| {
         GatewayError::Internal(format!("provider {} not found", model.provider_id))
     })?;
-    let configured_guardrails = resolve_model_guardrails(&model, resources.as_ref())?;
     let provider_instance = create_provider_instance(gateway.as_ref(), &provider)?;
     let provider_base_url = provider_instance.effective_base_url().ok();
     let mut lifecycle_state =
         A::prepare_lifecycle(&state, &mut request_ctx, &mut request_data).await?;
+    let policy_request_raw = serde_json::to_value(&request_data).map_err(|err| {
+        GatewayError::Internal(format!(
+            "failed to serialize request for policy evaluation: {err}"
+        ))
+    })?;
+    let policy_input_messages = policy_input_messages::<A>(&lifecycle_state, &request_data)?;
+    let resolved_guardrails = resolve_request_guardrails(RequestGuardrailResolution {
+        request_ctx: &request_ctx,
+        model: &model,
+        provider: &provider,
+        route_format: stable_route_format(<AdapterFormat<A> as ChatFormat>::name()),
+        request_model: &requested_model_name,
+        request_stream: <AdapterFormat<A> as ChatFormat>::is_stream(&request_data),
+        request_raw: &policy_request_raw,
+        input_messages: &policy_input_messages,
+        resources: resources.as_ref(),
+    })
+    .await?;
+    A::set_model(&mut request_data, model.model.clone());
 
     apply_input_guardrails::<A>(
-        &configured_guardrails,
+        &resolved_guardrails,
         &mut lifecycle_state,
         &mut request_data,
     )
@@ -269,7 +286,7 @@ where
             usage,
         })) => {
             let output_guardrail_result = apply_output_guardrails::<A>(
-                &configured_guardrails,
+                &resolved_guardrails,
                 &mut lifecycle_state,
                 &mut response,
             )
@@ -295,7 +312,7 @@ where
         Ok(Ok(ChatResponse::Stream { stream, usage_rx })) => {
             handle_stream_response::<A>(
                 state,
-                configured_guardrails,
+                resolved_guardrails,
                 stream,
                 usage_rx,
                 &mut request_ctx,
@@ -315,8 +332,30 @@ where
     }
 }
 
+fn policy_input_messages<A>(
+    lifecycle_state: &A::LifecycleState,
+    request: &AdapterRequest<A>,
+) -> Result<Vec<ChatMessage>, A::Error>
+where
+    A: FormatHandlerAdapter,
+{
+    let Some(payload) = A::guardrail_input_payload(lifecycle_state, request)? else {
+        return Ok(Vec::new());
+    };
+
+    let input = input_payload_from_check_payload(payload).map_err(guardrail_bridge_error)?;
+    Ok(input_payload_to_chat_messages(&input).map_err(guardrail_bridge_error)?)
+}
+
+fn guardrail_bridge_error<E>(error: E) -> GatewayError
+where
+    E: std::fmt::Display,
+{
+    GatewayError::Bridge(error.to_string())
+}
+
 async fn apply_input_guardrails<A>(
-    guardrails: &[Box<dyn ConfiguredGuardrailRuntime>],
+    guardrails: &[Box<dyn ResolvedGuardrail>],
     lifecycle_state: &mut A::LifecycleState,
     request: &mut AdapterRequest<A>,
 ) -> Result<(), A::Error>
@@ -351,7 +390,7 @@ where
 }
 
 async fn apply_output_guardrails<A>(
-    guardrails: &[Box<dyn ConfiguredGuardrailRuntime>],
+    guardrails: &[Box<dyn ResolvedGuardrail>],
     lifecycle_state: &mut A::LifecycleState,
     response: &mut AdapterResponse<A>,
 ) -> Result<(), A::Error>
@@ -386,7 +425,7 @@ where
 }
 
 async fn apply_stream_output_guardrails<A>(
-    guardrails: &[Box<dyn ConfiguredGuardrailRuntime>],
+    guardrails: &[Box<dyn ResolvedGuardrail>],
     payload: &GuardrailCheckPayload,
 ) -> Result<(), A::Error>
 where
@@ -431,7 +470,7 @@ fn require_stream_output_guardrail_payload(
     })
 }
 
-fn has_output_guardrails(guardrails: &[Box<dyn ConfiguredGuardrailRuntime>]) -> bool {
+fn has_output_guardrails(guardrails: &[Box<dyn ResolvedGuardrail>]) -> bool {
     guardrails
         .iter()
         .any(|guardrail| guardrail.supports_stage(crate::guardrail::traits::GuardrailStage::Output))
@@ -595,7 +634,7 @@ async fn record_first_stream_output_emit<A>(
 
 async fn handle_stream_response<A>(
     state: AppState,
-    configured_guardrails: Vec<Box<dyn ConfiguredGuardrailRuntime>>,
+    resolved_guardrails: Vec<Box<dyn ResolvedGuardrail>>,
     stream: ChatResponseStream<AdapterFormat<A>>,
     usage_rx: oneshot::Receiver<Usage>,
     request_ctx: &mut RequestContext,
@@ -609,13 +648,12 @@ where
 
     let stream_request_ctx = request_ctx.clone();
     let stream_state = state.clone();
-    let replay_driver =
-        WholeResponseReplayDriver::new(has_output_guardrails(&configured_guardrails));
-    let configured_guardrails = Arc::new(configured_guardrails);
+    let replay_driver = WholeResponseReplayDriver::new(has_output_guardrails(&resolved_guardrails));
+    let resolved_guardrails = Arc::new(resolved_guardrails);
     let sse_stream = futures::stream::unfold(
         (
             stream_state,
-            configured_guardrails,
+            resolved_guardrails,
             stream,
             span,
             stream_request_ctx,
@@ -630,7 +668,7 @@ where
         ),
         |(
             state,
-            configured_guardrails,
+            resolved_guardrails,
             mut stream,
             span,
             mut request_ctx,
@@ -674,7 +712,7 @@ where
                         Ok::<SseEvent, Infallible>(A::serialize_stream_item(&chunk)),
                         (
                             state,
-                            configured_guardrails,
+                            resolved_guardrails,
                             stream,
                             span,
                             request_ctx,
@@ -711,7 +749,7 @@ where
                                     Ok(event),
                                     (
                                         state,
-                                        configured_guardrails,
+                                        resolved_guardrails,
                                         stream,
                                         span,
                                         request_ctx,
@@ -737,7 +775,7 @@ where
                             Ok(event),
                             (
                                 state,
-                                configured_guardrails,
+                                resolved_guardrails,
                                 stream,
                                 span,
                                 request_ctx,
@@ -788,7 +826,7 @@ where
                                 Ok::<SseEvent, Infallible>(A::serialize_stream_item(&chunk)),
                                 (
                                     state,
-                                    configured_guardrails,
+                                    resolved_guardrails,
                                     stream,
                                     span,
                                     request_ctx,
@@ -834,7 +872,7 @@ where
                                 Ok(event),
                                 (
                                     state,
-                                    configured_guardrails,
+                                    resolved_guardrails,
                                     stream,
                                     span,
                                     request_ctx,
@@ -865,7 +903,7 @@ where
                                             match require_stream_output_guardrail_payload(payload) {
                                                 Ok(payload) => {
                                                     apply_stream_output_guardrails::<A>(
-                                                        configured_guardrails.as_ref(),
+                                                        resolved_guardrails.as_ref(),
                                                         &payload,
                                                     )
                                                     .await
@@ -926,7 +964,7 @@ where
                                             Ok(event),
                                             (
                                                 state,
-                                                configured_guardrails,
+                                                resolved_guardrails,
                                                 stream,
                                                 span,
                                                 request_ctx,
