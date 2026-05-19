@@ -13,12 +13,15 @@ import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutProvidersIndexRouteImport } from './routes/_layout/providers/index'
+import { Route as LayoutPoliciesIndexRouteImport } from './routes/_layout/policies/index'
 import { Route as LayoutPlaygroundIndexRouteImport } from './routes/_layout/playground/index'
 import { Route as LayoutModelsIndexRouteImport } from './routes/_layout/models/index'
 import { Route as LayoutGuardrailsIndexRouteImport } from './routes/_layout/guardrails/index'
 import { Route as LayoutApikeysIndexRouteImport } from './routes/_layout/apikeys/index'
 import { Route as LayoutProvidersCreateRouteImport } from './routes/_layout/providers/create'
 import { Route as LayoutProvidersIdRouteImport } from './routes/_layout/providers/$id'
+import { Route as LayoutPoliciesCreateRouteImport } from './routes/_layout/policies/create'
+import { Route as LayoutPoliciesIdRouteImport } from './routes/_layout/policies/$id'
 import { Route as LayoutModelsCreateRouteImport } from './routes/_layout/models/create'
 import { Route as LayoutModelsIdRouteImport } from './routes/_layout/models/$id'
 import { Route as LayoutGuardrailsCreateRouteImport } from './routes/_layout/guardrails/create'
@@ -43,6 +46,11 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
 const LayoutProvidersIndexRoute = LayoutProvidersIndexRouteImport.update({
   id: '/providers/',
   path: '/providers/',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutPoliciesIndexRoute = LayoutPoliciesIndexRouteImport.update({
+  id: '/policies/',
+  path: '/policies/',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutPlaygroundIndexRoute = LayoutPlaygroundIndexRouteImport.update({
@@ -73,6 +81,16 @@ const LayoutProvidersCreateRoute = LayoutProvidersCreateRouteImport.update({
 const LayoutProvidersIdRoute = LayoutProvidersIdRouteImport.update({
   id: '/providers/$id',
   path: '/providers/$id',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutPoliciesCreateRoute = LayoutPoliciesCreateRouteImport.update({
+  id: '/policies/create',
+  path: '/policies/create',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutPoliciesIdRoute = LayoutPoliciesIdRouteImport.update({
+  id: '/policies/$id',
+  path: '/policies/$id',
   getParentRoute: () => LayoutRoute,
 } as any)
 const LayoutModelsCreateRoute = LayoutModelsCreateRouteImport.update({
@@ -115,12 +133,15 @@ export interface FileRoutesByFullPath {
   '/guardrails/create': typeof LayoutGuardrailsCreateRoute
   '/models/$id': typeof LayoutModelsIdRoute
   '/models/create': typeof LayoutModelsCreateRoute
+  '/policies/$id': typeof LayoutPoliciesIdRoute
+  '/policies/create': typeof LayoutPoliciesCreateRoute
   '/providers/$id': typeof LayoutProvidersIdRoute
   '/providers/create': typeof LayoutProvidersCreateRoute
   '/apikeys/': typeof LayoutApikeysIndexRoute
   '/guardrails/': typeof LayoutGuardrailsIndexRoute
   '/models/': typeof LayoutModelsIndexRoute
   '/playground/': typeof LayoutPlaygroundIndexRoute
+  '/policies/': typeof LayoutPoliciesIndexRoute
   '/providers/': typeof LayoutProvidersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -132,12 +153,15 @@ export interface FileRoutesByTo {
   '/guardrails/create': typeof LayoutGuardrailsCreateRoute
   '/models/$id': typeof LayoutModelsIdRoute
   '/models/create': typeof LayoutModelsCreateRoute
+  '/policies/$id': typeof LayoutPoliciesIdRoute
+  '/policies/create': typeof LayoutPoliciesCreateRoute
   '/providers/$id': typeof LayoutProvidersIdRoute
   '/providers/create': typeof LayoutProvidersCreateRoute
   '/apikeys': typeof LayoutApikeysIndexRoute
   '/guardrails': typeof LayoutGuardrailsIndexRoute
   '/models': typeof LayoutModelsIndexRoute
   '/playground': typeof LayoutPlaygroundIndexRoute
+  '/policies': typeof LayoutPoliciesIndexRoute
   '/providers': typeof LayoutProvidersIndexRoute
 }
 export interface FileRoutesById {
@@ -151,12 +175,15 @@ export interface FileRoutesById {
   '/_layout/guardrails/create': typeof LayoutGuardrailsCreateRoute
   '/_layout/models/$id': typeof LayoutModelsIdRoute
   '/_layout/models/create': typeof LayoutModelsCreateRoute
+  '/_layout/policies/$id': typeof LayoutPoliciesIdRoute
+  '/_layout/policies/create': typeof LayoutPoliciesCreateRoute
   '/_layout/providers/$id': typeof LayoutProvidersIdRoute
   '/_layout/providers/create': typeof LayoutProvidersCreateRoute
   '/_layout/apikeys/': typeof LayoutApikeysIndexRoute
   '/_layout/guardrails/': typeof LayoutGuardrailsIndexRoute
   '/_layout/models/': typeof LayoutModelsIndexRoute
   '/_layout/playground/': typeof LayoutPlaygroundIndexRoute
+  '/_layout/policies/': typeof LayoutPoliciesIndexRoute
   '/_layout/providers/': typeof LayoutProvidersIndexRoute
 }
 export interface FileRouteTypes {
@@ -170,12 +197,15 @@ export interface FileRouteTypes {
     | '/guardrails/create'
     | '/models/$id'
     | '/models/create'
+    | '/policies/$id'
+    | '/policies/create'
     | '/providers/$id'
     | '/providers/create'
     | '/apikeys/'
     | '/guardrails/'
     | '/models/'
     | '/playground/'
+    | '/policies/'
     | '/providers/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -187,12 +217,15 @@ export interface FileRouteTypes {
     | '/guardrails/create'
     | '/models/$id'
     | '/models/create'
+    | '/policies/$id'
+    | '/policies/create'
     | '/providers/$id'
     | '/providers/create'
     | '/apikeys'
     | '/guardrails'
     | '/models'
     | '/playground'
+    | '/policies'
     | '/providers'
   id:
     | '__root__'
@@ -205,12 +238,15 @@ export interface FileRouteTypes {
     | '/_layout/guardrails/create'
     | '/_layout/models/$id'
     | '/_layout/models/create'
+    | '/_layout/policies/$id'
+    | '/_layout/policies/create'
     | '/_layout/providers/$id'
     | '/_layout/providers/create'
     | '/_layout/apikeys/'
     | '/_layout/guardrails/'
     | '/_layout/models/'
     | '/_layout/playground/'
+    | '/_layout/policies/'
     | '/_layout/providers/'
   fileRoutesById: FileRoutesById
 }
@@ -247,6 +283,13 @@ declare module '@tanstack/react-router' {
       path: '/providers'
       fullPath: '/providers/'
       preLoaderRoute: typeof LayoutProvidersIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/policies/': {
+      id: '/_layout/policies/'
+      path: '/policies'
+      fullPath: '/policies/'
+      preLoaderRoute: typeof LayoutPoliciesIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/playground/': {
@@ -289,6 +332,20 @@ declare module '@tanstack/react-router' {
       path: '/providers/$id'
       fullPath: '/providers/$id'
       preLoaderRoute: typeof LayoutProvidersIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/policies/create': {
+      id: '/_layout/policies/create'
+      path: '/policies/create'
+      fullPath: '/policies/create'
+      preLoaderRoute: typeof LayoutPoliciesCreateRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/policies/$id': {
+      id: '/_layout/policies/$id'
+      path: '/policies/$id'
+      fullPath: '/policies/$id'
+      preLoaderRoute: typeof LayoutPoliciesIdRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/models/create': {
@@ -344,12 +401,15 @@ interface LayoutRouteChildren {
   LayoutGuardrailsCreateRoute: typeof LayoutGuardrailsCreateRoute
   LayoutModelsIdRoute: typeof LayoutModelsIdRoute
   LayoutModelsCreateRoute: typeof LayoutModelsCreateRoute
+  LayoutPoliciesIdRoute: typeof LayoutPoliciesIdRoute
+  LayoutPoliciesCreateRoute: typeof LayoutPoliciesCreateRoute
   LayoutProvidersIdRoute: typeof LayoutProvidersIdRoute
   LayoutProvidersCreateRoute: typeof LayoutProvidersCreateRoute
   LayoutApikeysIndexRoute: typeof LayoutApikeysIndexRoute
   LayoutGuardrailsIndexRoute: typeof LayoutGuardrailsIndexRoute
   LayoutModelsIndexRoute: typeof LayoutModelsIndexRoute
   LayoutPlaygroundIndexRoute: typeof LayoutPlaygroundIndexRoute
+  LayoutPoliciesIndexRoute: typeof LayoutPoliciesIndexRoute
   LayoutProvidersIndexRoute: typeof LayoutProvidersIndexRoute
 }
 
@@ -361,12 +421,15 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutGuardrailsCreateRoute: LayoutGuardrailsCreateRoute,
   LayoutModelsIdRoute: LayoutModelsIdRoute,
   LayoutModelsCreateRoute: LayoutModelsCreateRoute,
+  LayoutPoliciesIdRoute: LayoutPoliciesIdRoute,
+  LayoutPoliciesCreateRoute: LayoutPoliciesCreateRoute,
   LayoutProvidersIdRoute: LayoutProvidersIdRoute,
   LayoutProvidersCreateRoute: LayoutProvidersCreateRoute,
   LayoutApikeysIndexRoute: LayoutApikeysIndexRoute,
   LayoutGuardrailsIndexRoute: LayoutGuardrailsIndexRoute,
   LayoutModelsIndexRoute: LayoutModelsIndexRoute,
   LayoutPlaygroundIndexRoute: LayoutPlaygroundIndexRoute,
+  LayoutPoliciesIndexRoute: LayoutPoliciesIndexRoute,
   LayoutProvidersIndexRoute: LayoutProvidersIndexRoute,
 }
 

@@ -68,6 +68,30 @@ export type Guardrail =
       config: BedrockGuardrailConfig;
     };
 
+export const POLICY_STAGE_VARIANTS = ['input', 'output'] as const;
+
+export type PolicyStage = (typeof POLICY_STAGE_VARIANTS)[number];
+
+export interface GuardrailPolicyActionConfig {
+  stages: PolicyStage[];
+  guardrail_ids: string[];
+}
+
+export interface GuardrailPolicyAction {
+  type: 'guardrail';
+  config: GuardrailPolicyActionConfig;
+}
+
+export type PolicyAction = GuardrailPolicyAction;
+
+export interface Policy {
+  name: string;
+  enabled: boolean;
+  priority: number;
+  when: string;
+  actions: PolicyAction[];
+}
+
 export const PROVIDER_TYPE_VARIANTS = [
   'openai',
   'openrouter',

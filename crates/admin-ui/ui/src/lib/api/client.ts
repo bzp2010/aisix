@@ -6,6 +6,7 @@ import type {
   ItemResponse,
   ListResponse,
   Model,
+  Policy,
   Provider,
 } from './types';
 
@@ -123,4 +124,31 @@ export const guardrailsApi = {
 
   delete: (adminKey: string, id: string) =>
     request<DeleteResponse>('DELETE', `/guardrails/${id}`, adminKey),
+};
+
+// ── Policies ───────────────────────────────────────────────────────────────────
+export const policiesApi = {
+  list: (adminKey: string) =>
+    request<ListResponse<Policy>>('GET', '/policies', adminKey),
+
+  get: (adminKey: string, id: string) =>
+    request<ItemResponse<Policy>>(
+      'GET',
+      `/policies/${encodeURIComponent(id)}`,
+      adminKey,
+    ),
+
+  create: (adminKey: string, data: Policy) =>
+    request<ItemResponse<Policy>>('POST', '/policies', adminKey, data),
+
+  update: (adminKey: string, id: string, data: Policy) =>
+    request<ItemResponse<Policy>>(
+      'PUT',
+      `/policies/${encodeURIComponent(id)}`,
+      adminKey,
+      data,
+    ),
+
+  delete: (adminKey: string, id: string) =>
+    request<DeleteResponse>('DELETE', `/policies/${encodeURIComponent(id)}`, adminKey),
 };

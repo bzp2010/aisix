@@ -6,6 +6,7 @@
     "providers": "Providers",
     "models": "Models",
     "guardrails": "Guardrails",
+    "policies": "Policies",
     "apiKeys": "API Keys",
     "settings": "Settings"
   },
@@ -66,6 +67,10 @@
   "guardrailTypes": {
     "regex": "Regex",
     "bedrock": "AWS Bedrock"
+  },
+  "policyStages": {
+    "input": "Input",
+    "output": "Output"
   },
   "playground": {
     "title": "Playground",
@@ -236,6 +241,68 @@
       "endpointHint": "Leave blank to use the standard runtime endpoint for the selected region.",
       "showSecret": "Show value",
       "hideSecret": "Hide value"
+    }
+  },
+  "policies": {
+    "title": "Policies",
+    "addPolicy": "Add Policy",
+    "deletePolicy": "Delete Policy",
+    "createTitle": "Create policy resource",
+    "createDesc": "Required: name, when, actions. Actions currently support guardrail attachments.",
+    "editTitle": "Edit policy resource",
+    "createPolicy": "Create Policy",
+    "columns": {
+      "id": "ID",
+      "name": "Name",
+      "enabled": "Status",
+      "priority": "Priority",
+      "when": "When",
+      "actions": "Actions",
+      "action": "Action"
+    },
+    "search": "Search policies…",
+    "count_one": "{{count}} policy",
+    "count_other": "{{count}} policies",
+    "empty": "No policies yet.",
+    "emptyAction": "Add one",
+    "errorLoad": "Failed to load policies.",
+    "errorLoadSingle": "Failed to load policy.",
+    "deleteFailed": "Failed to delete policy.",
+    "bulkDeleteFailed": "Deleted {{successCount}} policies; {{failureCount}} deletions failed: {{details}}",
+    "deleteConfirm": "Delete policy \"{{id}}\"?",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "form": {
+      "basicInfo": "Basic Information",
+      "nameLabel": "Name *",
+      "namePlaceholder": "e.g. tenant-a-bedrock-default",
+      "nameRequired": "Please enter a policy name before saving.",
+      "enabledLabel": "Enabled",
+      "priorityLabel": "Priority",
+      "priorityHint": "Integer value; defaults to 0.",
+      "priorityInvalid": "Please enter a valid integer priority.",
+      "whenLabel": "When (CEL) *",
+      "whenPlaceholder": "e.g. route.format == 'chat_completions' && auth.api_key.id == 'tenant-a'",
+      "whenRequired": "Please enter a CEL expression.",
+      "actions": "Actions",
+      "actionsRequired": "At least one action is required.",
+      "actionTitle": "Action {{index}}",
+      "guardrailAction": "Guardrail action",
+      "addAction": "Add Action",
+      "removeAction": "Remove Action",
+      "stagesLabel": "Stages *",
+      "stagesRequired": "Select at least one stage for every action.",
+      "guardrailsLabel": "Guardrails *",
+      "guardrailsHint": "Select one or more existing guardrails for this action.",
+      "guardrailsLoading": "Loading guardrails...",
+      "guardrailsLoadError": "Failed to load guardrails. Refresh and try again.",
+      "guardrailsEmpty": "No guardrails available yet. Create one first.",
+      "guardrailsRequired": "Select at least one guardrail for every action.",
+      "guardrailsNoSelection": "No guardrails selected.",
+      "guardrailsRefresh": "Refresh guardrails",
+      "guardrailsCreate": "Create guardrail",
+      "guardrailsMissing": "Missing resource",
+      "guardrailsMissingHint": "This referenced guardrail is not present in the current resource list."
     }
   },
   "providers": {
