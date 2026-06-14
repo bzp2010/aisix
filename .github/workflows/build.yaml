@@ -50,18 +50,18 @@ jobs:
         id: ui-cache
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # 5.0.4
         with:
-          path: crates/admin-ui/ui-dist
-          key: ui-dist-${{ hashFiles('crates/admin-ui/ui/src/**',
-            'crates/admin-ui/ui/index.html',
-            'crates/admin-ui/ui/vite.config.ts',
-            'crates/admin-ui/ui/tsconfig*.json',
-            'crates/admin-ui/ui/package.json',
-            'crates/admin-ui/ui/pnpm-lock.yaml', 'crates/admin-ui/build.rs',
-            'crates/admin-ui/Cargo.toml') }}
+          path: crates/aisix-admin/ui-dist
+          key: ui-dist-${{ hashFiles('crates/aisix-admin/ui/src/**',
+            'crates/aisix-admin/ui/index.html',
+            'crates/aisix-admin/ui/vite.config.ts',
+            'crates/aisix-admin/ui/tsconfig*.json',
+            'crates/aisix-admin/ui/package.json',
+            'crates/aisix-admin/ui/pnpm-lock.yaml', 'crates/aisix-admin/build.rs',
+            'crates/aisix-admin/Cargo.toml') }}
 
       - name: Build UI
         if: steps.ui-cache.outputs.cache-hit != 'true'
-        run: cargo build -p aisix-admin-ui --features build-ui -vv
+        run: cargo build -p aisix-admin --features build-ui -vv
 
       - name: Run Lint
         run: cargo clippy --workspace --all-targets --locked -- -D warnings

@@ -4,7 +4,7 @@ use aisix_core::entities::{ApiKey, apikeys};
 use aisix_core::entities::types::{HasRateLimit, RateLimit, RateLimitMetric};
 
 use super::{EntityStore, IndexFn, ResourceEntry};
-use crate::config::ConfigProvider;
+use crate::ConfigProvider;
 
 pub static INDEX_FNS: &[IndexFn<ApiKey>] = &[("by_key", |k: &ApiKey| Some(k.key.clone()))];
 

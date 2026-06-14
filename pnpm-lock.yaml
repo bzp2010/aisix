@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  crates/admin-ui/ui:
+  crates/aisix-admin/ui:
     dependencies:
       '@base-ui/react':
         specifier: ^1.4.1

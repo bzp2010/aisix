@@ -8,7 +8,7 @@ use axum::{
 use serde_json::json;
 use tower::util::ServiceExt;
 
-use crate::admin::AppState;
+use super::AppState;
 
 pub async fn chat_completions(State(state): State<AppState>, mut req: Request<Body>) -> Response {
     match "/v1/chat/completions".parse() {

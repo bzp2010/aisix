@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use aisix_core::entities::{Policy, policies};
 
 use super::{EntityStore, IndexFn, ResourceEntry};
-use crate::config::ConfigProvider;
+use crate::ConfigProvider;
 
 pub static INDEX_FNS: &[IndexFn<Policy>] =
     &[("by_name", |policy: &Policy| Some(policy.name.clone()))];

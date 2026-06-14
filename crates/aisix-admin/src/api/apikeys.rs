@@ -6,21 +6,21 @@ use bytes::Bytes;
 use http::StatusCode;
 use uuid::Uuid;
 
-use crate::{
-    admin::{
-        AppState,
-        types::{APIError, DeleteResponse, ItemResponse, ListResponse},
-    },
-    config::PutEntry,
-};
+use aisix_config::PutEntry;
 use aisix_core::entities::{ApiKey, apikeys::SCHEMA_VALIDATOR};
 use aisix_utils::jsonschema::format_evaluation_error;
+
+use super::{
+    AppState,
+    types::{APIError, DeleteResponse, ItemResponse, ListResponse},
+    PATH_PREFIX,
+};
 
 pub const OPENAPI_TAG: &str = "API Keys";
 
 #[utoipa::path(
     get,
-    context_path = crate::admin::PATH_PREFIX,
+    context_path = PATH_PREFIX,
     path = "/apikeys",
     tag = OPENAPI_TAG,
     responses(
@@ -57,7 +57,7 @@ pub async fn list(State(state): State<AppState>) -> Response {
 
 #[utoipa::path(
     get,
-    context_path = crate::admin::PATH_PREFIX,
+    context_path = PATH_PREFIX,
     path = "/apikeys/{id}",
     tag = OPENAPI_TAG,
     params(
@@ -95,7 +95,7 @@ pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> Respo
 
 #[utoipa::path(
     post,
-    context_path = crate::admin::PATH_PREFIX,
+    context_path = PATH_PREFIX,
     path = "/apikeys",
     tag = OPENAPI_TAG,
     request_body(content_type = "application/json", content = ApiKey),
@@ -111,7 +111,7 @@ pub async fn post(State(state): State<AppState>, body: Bytes) -> Response {
 
 #[utoipa::path(
     put,
-    context_path = crate::admin::PATH_PREFIX,
+    context_path = PATH_PREFIX,
     path = "/apikeys/{id}",
     tag = OPENAPI_TAG,
     params(
@@ -131,7 +131,7 @@ pub async fn put(State(state): State<AppState>, Path(id): Path<String>, body: By
 
 #[utoipa::path(
     delete,
-    context_path = crate::admin::PATH_PREFIX,
+    context_path = PATH_PREFIX,
     path = "/apikeys/{id}",
     tag = OPENAPI_TAG,
     params(

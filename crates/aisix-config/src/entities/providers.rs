@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use aisix_core::entities::{Provider, providers};
 
 use super::{EntityStore, ResourceEntry};
-use crate::config::ConfigProvider;
+use crate::ConfigProvider;
 
 #[derive(Clone)]
 pub struct ProvidersStore {

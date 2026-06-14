@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aisix-core", "crates/aisix-utils", "crates/aisix-observability", "crates/aisix-llm", "crates/aisix-guardrail", "crates/admin-ui"]
+members = ["crates/aisix-core", "crates/aisix-utils", "crates/aisix-observability", "crates/aisix-llm", "crates/aisix-guardrail", "crates/aisix-config", "crates/aisix-admin"]
 resolver = "3"
 
 [workspace.package]
@@ -54,7 +54,7 @@ edition = "2024"
 rust-version = "1.85"
 
 [features]
-build-ui = ["aisix-admin-ui/build-ui"]
+build-ui = ["aisix-admin/build-ui"]
 
 [dependencies]
 aisix-core = { path = "crates/aisix-core" }
@@ -62,7 +62,8 @@ aisix-utils = { path = "crates/aisix-utils" }
 aisix-observability = { path = "crates/aisix-observability" }
 aisix-llm = { path = "crates/aisix-llm" }
 aisix-guardrail = { path = "crates/aisix-guardrail" }
-aisix-admin-ui = { path = "crates/admin-ui" }
+aisix-config = { path = "crates/aisix-config" }
+aisix-admin = { path = "crates/aisix-admin" }
 anyhow.workspace = true
 tokio.workspace = true
 reqwest.workspace = true

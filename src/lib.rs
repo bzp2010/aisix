@@ -1,4 +1,3 @@
-mod admin;
 pub mod config;
 mod proxy;
 
@@ -110,7 +109,20 @@ pub async fn run_with_provider(
             res.context("failed to listen for shutdown signal"),
         res = serve_proxy(config.clone(), proxy_router.clone()) =>
             res.context("proxy server error"),
-        res = serve_admin(config.clone(), admin::AppState::new(config, config_provider.clone(), resources, Some(proxy_router))) =>
+        res = serve_admin(config.clone(), aisix_admin::AppState::new(
+            aisix_admin::ServerCommonCors {
+                enabled: config.server.admin.cors.enabled,
+                allowed_origins: config.server.admin.cors.allowed_origins.clone(),
+                allowed_methods: config.server.admin.cors.allowed_methods.clone(),
+                allowed_headers: config.server.admin.cors.allowed_headers.clone(),
+                exposed_headers: config.server.admin.cors.exposed_headers.clone(),
+                allow_credentials: config.server.admin.cors.allow_credentials,
+            },
+            config.deployment.admin.admin_key.iter().map(|k| aisix_admin::AdminKey { key: k.key.clone() }).collect(),
+            config_provider.clone(),
+            resources,
+            Some(proxy_router),
+        )) =>
             res.context("admin server error"),
     };
 
@@ -142,12 +154,12 @@ async fn serve_proxy(config: Arc<config::Config>, router: Router) -> Result<()> 
     .await
 }
 
-async fn serve_admin(config: Arc<config::Config>, state: admin::AppState) -> Result<()> {
+async fn serve_admin(config: Arc<config::Config>, state: aisix_admin::AppState) -> Result<()> {
     serve(
         "Admin",
         config.server.admin.listen,
         &config.server.admin.tls,
-        admin::create_router(state).context("failed to create admin router")?,
+        aisix_admin::create_router(state).context("failed to create admin router")?,
     )
     .await
 }

@@ -18,7 +18,7 @@ use tokio::{
     time::sleep,
 };
 
-use crate::config::{ConfigEvent, ConfigEventReceiver, ConfigProvider, GetEntry, PutEntry};
+use aisix_config::{ConfigEvent, ConfigEventReceiver, ConfigProvider, GetEntry, PutEntry};
 
 // ── TLS certificate material ──────────────────────────────────────────────────
 

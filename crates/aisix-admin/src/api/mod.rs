@@ -4,11 +4,12 @@ mod models;
 mod playground;
 mod policies;
 mod providers;
-mod types;
+pub mod types;
 
 use std::sync::Arc;
+use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::{
     Router,
     extract::{Request, State},
@@ -16,6 +17,8 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
+use http::{HeaderValue, Method, header::HeaderName};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use utoipa::{
     Modify, OpenApi,
     openapi::security::{
@@ -25,11 +28,9 @@ use utoipa::{
 };
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
-use crate::{
-    admin::types::AuthError,
-    config::{Config, ConfigProvider},
-};
-use crate::config::entities::ResourceRegistry;
+use aisix_config::{ConfigProvider, entities::ResourceRegistry};
+
+use self::types::AuthError;
 
 pub const PATH_PREFIX: &str = "/aisix/admin";
 
@@ -95,9 +96,86 @@ impl Modify for SecurityAddon {
     }
 }
 
+/// CORS configuration for the admin server.
+#[derive(Clone, Debug, Default)]
+pub struct ServerCommonCors {
+    pub enabled: bool,
+    pub allowed_origins: Option<Vec<String>>,
+    pub allowed_methods: Option<Vec<String>>,
+    pub allowed_headers: Option<Vec<String>>,
+    pub exposed_headers: Option<Vec<String>>,
+    pub allow_credentials: Option<bool>,
+}
+
+impl ServerCommonCors {
+    pub fn to_cors_layer(&self) -> Result<CorsLayer> {
+        let mut cors =
+            CorsLayer::new().allow_credentials(self.allow_credentials.unwrap_or(false));
+
+        if let Some(origins) = self.allowed_origins.as_deref() {
+            cors = cors.allow_origin(if origins.iter().any(|o| o == "*") {
+                AllowOrigin::any()
+            } else {
+                AllowOrigin::list(Self::parse_cors_values(
+                    "allowed_origin",
+                    origins,
+                    HeaderValue::from_str,
+                )?)
+            });
+        }
+
+        if let Some(methods) = self.allowed_methods.as_deref() {
+            cors = cors.allow_methods(Self::parse_cors_values(
+                "allowed_method",
+                methods,
+                Method::from_str,
+            )?);
+        }
+
+        if let Some(headers) = self.allowed_headers.as_deref() {
+            cors = cors.allow_headers(Self::parse_cors_values(
+                "allowed_header",
+                headers,
+                HeaderName::from_str,
+            )?);
+        }
+
+        if let Some(headers) = self.exposed_headers.as_deref() {
+            cors = cors.expose_headers(Self::parse_cors_values(
+                "exposed_header",
+                headers,
+                HeaderName::from_str,
+            )?);
+        }
+
+        Ok(cors)
+    }
+
+    fn parse_cors_values<T, E, F>(field: &str, values: &[String], mut parse: F) -> Result<Vec<T>>
+    where
+        F: FnMut(&str) -> std::result::Result<T, E>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        values
+            .iter()
+            .map(|value| {
+                parse(value)
+                    .with_context(|| format!("Invalid CORS {}: {}", field, value))
+            })
+            .collect()
+    }
+}
+
+/// An admin API key entry.
+#[derive(Clone, Debug)]
+pub struct AdminKey {
+    pub key: String,
+}
+
 #[derive(Clone)]
 pub struct AppState {
-    config: Arc<Config>,
+    cors_config: ServerCommonCors,
+    admin_keys: Vec<AdminKey>,
     config_provider: Arc<dyn ConfigProvider>,
     resources: Arc<ResourceRegistry>,
     proxy_router: Option<Router>,
@@ -105,13 +183,15 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(
-        config: Arc<Config>,
+        cors_config: ServerCommonCors,
+        admin_keys: Vec<AdminKey>,
         config_provider: Arc<dyn ConfigProvider>,
         resources: Arc<ResourceRegistry>,
         proxy_router: Option<Router>,
     ) -> Self {
         Self {
-            config,
+            cors_config,
+            admin_keys,
             config_provider,
             resources,
             proxy_router,
@@ -182,11 +262,11 @@ pub fn create_router(state: AppState) -> Result<Router> {
             Router::new().route("/chat/completions", post(playground::chat_completions)),
         )
         .route("/ui", get(|| async { Redirect::to("/ui/") }))
-        .route("/ui/", get(aisix_admin_ui::handler))
-        .route("/ui/{*path}", get(aisix_admin_ui::handler))
+        .route("/ui/", get(crate::ui::handler))
+        .route("/ui/{*path}", get(crate::ui::handler))
         .merge(Scalar::with_url("/openapi", ApiDoc::openapi()));
 
-    let cors = &state.config.server.admin.cors;
+    let cors = &state.cors_config;
     if cors.enabled {
         router = router.layer(cors.to_cors_layer()?)
     };
@@ -215,12 +295,11 @@ async fn auth(
         },
     };
 
-    let admin_keys = &state.config.deployment.admin.admin_key;
-    if admin_keys.is_empty() {
+    if state.admin_keys.is_empty() {
         return Err(AuthError::MissingKey.into_response());
     }
 
-    if !admin_keys.iter().any(|item| item.key == api_key) {
+    if !state.admin_keys.iter().any(|item| item.key == api_key) {
         return Err(AuthError::InvalidKey.into_response());
     }
 

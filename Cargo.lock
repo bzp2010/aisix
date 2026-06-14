@@ -29,7 +29,8 @@ dependencies = [
 name = "aisix"
 version = "0.1.0"
 dependencies = [
- "aisix-admin-ui",
+ "aisix-admin",
+ "aisix-config",
  "aisix-core",
  "aisix-guardrail",
  "aisix-llm",
@@ -92,16 +93,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "aisix-admin-ui"
+name = "aisix-admin"
 version = "0.1.0"
 dependencies = [
+ "aisix-config",
+ "aisix-core",
+ "aisix-utils",
  "anyhow",
- "assert_matches",
  "axum",
+ "bytes",
  "http 1.4.0",
  "mime_guess",
- "pretty_assertions",
  "rust-embed",
+ "serde",
+ "serde_json",
+ "tower",
+ "tower-http",
+ "utoipa",
+ "utoipa-scalar",
+ "uuid",
+]
+
+[[package]]
+name = "aisix-config"
+version = "0.1.0"
+dependencies = [
+ "aisix-core",
+ "anyhow",
+ "arc-swap",
+ "assert_matches",
+ "async-trait",
+ "log",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-test",
 ]
 
 [[package]]

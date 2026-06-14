@@ -4,7 +4,7 @@ use aisix_core::entities::{Model, models};
 use aisix_core::entities::types::{HasRateLimit, RateLimit, RateLimitMetric};
 
 use super::{EntityStore, IndexFn, ResourceEntry};
-use crate::config::ConfigProvider;
+use crate::ConfigProvider;
 
 pub static INDEX_FNS: &[IndexFn<Model>] = &[("by_name", |m: &Model| Some(m.name.clone()))];
 

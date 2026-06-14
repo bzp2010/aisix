@@ -7,6 +7,9 @@ use std::sync::Arc;
 use anyhow::Result;
 pub use types::*;
 
+// Re-export aisix-config abstractions so existing code can use `crate::config::*`
+pub use aisix_config::{ConfigEvent, ConfigEventReceiver, ConfigProvider, GetEntry, PutEntry};
+
 /// Load configuration file
 pub fn load(config_file: Option<String>) -> Result<Config, config::ConfigError> {
     let mut builder = config::Config::builder();

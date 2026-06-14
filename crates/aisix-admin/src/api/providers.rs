@@ -6,39 +6,38 @@ use bytes::Bytes;
 use http::StatusCode;
 use uuid::Uuid;
 
-use crate::{
-    admin::{
-        AppState,
-        types::{APIError, DeleteResponse, ItemResponse, ListResponse},
-    },
-    config::PutEntry,
-};
-use aisix_core::entities::{
-    Guardrail, Policy,
-    guardrails::{SCHEMA_VALIDATOR, validate_guardrail_definition},
-};
+use aisix_config::PutEntry;
+use aisix_core::entities::{Model, Provider, providers::SCHEMA_VALIDATOR};
 use aisix_utils::jsonschema::format_evaluation_error;
 
-pub const OPENAPI_TAG: &str = "Guardrails";
+use super::{
+    AppState,
+    types::{APIError, DeleteResponse, ItemResponse, ListResponse},
+    PATH_PREFIX,
+};
+
+pub const OPENAPI_TAG: &str = "Providers";
 
 #[utoipa::path(
     get,
-    context_path = crate::admin::PATH_PREFIX,
-    path = "/guardrails",
+    context_path = PATH_PREFIX,
+    path = "/providers",
     tag = OPENAPI_TAG,
     responses(
-        (status = StatusCode::OK, description = "Get guardrail list success", body = ListResponse<ItemResponse<Guardrail>>),
+        (status = StatusCode::OK, description = "Get provider list success", body = ListResponse<ItemResponse<Provider>>),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal server error", body = APIError)
     )
 )]
 pub async fn list(State(state): State<AppState>) -> Response {
     let data = match state
         .config_provider
-        .get_all::<serde_json::Value>("/guardrails")
+        .get_all::<serde_json::Value>("/providers")
         .await
     {
         Ok(data) => data,
-        Err(err) => return APIError::InternalError(err).into_response(),
+        Err(err) => {
+            return APIError::InternalError(err).into_response();
+        }
     };
 
     ListResponse {
@@ -58,26 +57,31 @@ pub async fn list(State(state): State<AppState>) -> Response {
 
 #[utoipa::path(
     get,
-    context_path = crate::admin::PATH_PREFIX,
-    path = "/guardrails/{id}",
+    context_path = PATH_PREFIX,
+    path = "/providers/{id}",
     tag = OPENAPI_TAG,
     params(
-        ("id" = String, Path, description = "The ID of the guardrail"),
+        ("id" = String, Path, description = "The ID of the provider"),
     ),
     responses(
-        (status = StatusCode::OK, description = "Get guardrail success", body = ItemResponse<Guardrail>),
-        (status = StatusCode::NOT_FOUND, description = "Guardrail not found", body = APIError),
+        (status = StatusCode::OK, description = "Get provider success", body = ItemResponse<Provider>),
+        (status = StatusCode::NOT_FOUND, description = "Provider not found", body = APIError),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal server error", body = APIError)
     )
 )]
 pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let key = format!("/guardrails/{id}");
+    let key = format!("/providers/{id}");
     let data = match state.config_provider.get::<serde_json::Value>(&key).await {
-        Ok(Some(data)) => data,
-        Ok(None) => {
-            return APIError::NotFound(format!("Guardrail with ID {id} not found")).into_response();
+        Ok(opt) => match opt {
+            Some(data) => data,
+            None => {
+                return APIError::NotFound(format!("Provider with ID {} not found", id))
+                    .into_response();
+            }
+        },
+        Err(err) => {
+            return APIError::InternalError(err).into_response();
         }
-        Err(err) => return APIError::InternalError(err).into_response(),
     };
 
     ItemResponse {
@@ -91,12 +95,12 @@ pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> Respo
 
 #[utoipa::path(
     post,
-    context_path = crate::admin::PATH_PREFIX,
-    path = "/guardrails",
+    context_path = PATH_PREFIX,
+    path = "/providers",
     tag = OPENAPI_TAG,
-    request_body(content_type = "application/json", content = Guardrail),
+    request_body(content_type = "application/json", content = Provider),
     responses(
-        (status = StatusCode::CREATED, description = "Guardrail created successfully", body = ItemResponse<Guardrail>),
+        (status = StatusCode::CREATED, description = "Provider created successfully", body = ItemResponse<Provider>),
         (status = StatusCode::BAD_REQUEST, description = "Bad request", body = APIError),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal server error", body = APIError)
     )
@@ -107,16 +111,16 @@ pub async fn post(State(state): State<AppState>, body: Bytes) -> Response {
 
 #[utoipa::path(
     put,
-    context_path = crate::admin::PATH_PREFIX,
-    path = "/guardrails/{id}",
+    context_path = PATH_PREFIX,
+    path = "/providers/{id}",
     tag = OPENAPI_TAG,
     params(
-        ("id" = String, Path, description = "The ID of the guardrail"),
+        ("id" = String, Path, description = "The ID of the provider"),
     ),
-    request_body(content_type = "application/json", content = Guardrail),
+    request_body(content_type = "application/json", content = Provider),
     responses(
-        (status = StatusCode::OK, description = "Guardrail updated successfully", body = ItemResponse<Guardrail>),
-        (status = StatusCode::CREATED, description = "Guardrail created successfully", body = ItemResponse<Guardrail>),
+        (status = StatusCode::OK, description = "Provider updated successfully", body = ItemResponse<Provider>),
+        (status = StatusCode::CREATED, description = "Provider created successfully", body = ItemResponse<Provider>),
         (status = StatusCode::BAD_REQUEST, description = "Bad request", body = APIError),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal server error", body = APIError)
     )
@@ -127,62 +131,63 @@ pub async fn put(State(state): State<AppState>, Path(id): Path<String>, body: By
 
 #[utoipa::path(
     delete,
-    context_path = crate::admin::PATH_PREFIX,
-    path = "/guardrails/{id}",
+    context_path = PATH_PREFIX,
+    path = "/providers/{id}",
     tag = OPENAPI_TAG,
     params(
-        ("id" = String, Path, description = "The ID of the guardrail"),
+        ("id" = String, Path, description = "The ID of the provider"),
     ),
     responses(
-        (status = StatusCode::BAD_REQUEST, description = "Guardrail is still referenced by policies", body = APIError),
-        (status = StatusCode::OK, description = "Guardrail deleted successfully", body = DeleteResponse),
-        (status = StatusCode::NOT_FOUND, description = "Guardrail not found", body = APIError),
+        (status = StatusCode::BAD_REQUEST, description = "Provider is still referenced by models", body = APIError),
+        (status = StatusCode::OK, description = "Provider deleted successfully", body = DeleteResponse),
+        (status = StatusCode::NOT_FOUND, description = "Provider not found", body = APIError),
         (status = StatusCode::INTERNAL_SERVER_ERROR, description = "Internal server error", body = APIError)
     )
 )]
 pub async fn delete(State(state): State<AppState>, Path(id): Path<String>) -> Response {
-    let key = format!("/guardrails/{id}");
+    let key = format!("/providers/{id}");
 
     match state.config_provider.get::<serde_json::Value>(&key).await {
         Ok(Some(_)) => {}
         Ok(None) => {
-            return APIError::NotFound(format!("Guardrail with ID {id} not found")).into_response();
+            return APIError::NotFound(format!("Provider with ID {} not found", id))
+                .into_response();
         }
-        Err(err) => return APIError::InternalError(err).into_response(),
+        Err(err) => {
+            return APIError::InternalError(err).into_response();
+        }
     }
 
-    match state.config_provider.get_all::<Policy>("/policies").await {
-        Ok(policies) => {
-            if policies.iter().any(|item| {
-                item.value
-                    .referenced_guardrail_ids()
-                    .any(|guardrail_id| guardrail_id == id)
-            }) {
-                return APIError::BadRequest(
-                    "guardrail is still referenced by policies".to_string(),
-                )
-                .into_response();
+    match state.config_provider.get_all::<Model>("/models").await {
+        Ok(models) => {
+            if models.iter().any(|item| item.value.provider_id == id) {
+                return APIError::BadRequest("provider is still referenced by models".to_string())
+                    .into_response();
             }
         }
-        Err(err) => return APIError::InternalError(err).into_response(),
+        Err(err) => {
+            return APIError::InternalError(err).into_response();
+        }
     }
 
     match state.config_provider.delete(&key).await {
         Ok(deleted) if deleted > 0 => DeleteResponse { deleted, key }.into_response(),
-        Ok(_) => APIError::NotFound(format!("Guardrail with ID {id} not found")).into_response(),
+        Ok(_) => APIError::NotFound(format!("Provider with ID {} not found", id)).into_response(),
         Err(err) => APIError::InternalError(err).into_response(),
     }
 }
 
 async fn update(state: AppState, id: &str, body: Bytes) -> Response {
-    let key = format!("/guardrails/{id}");
+    let key = format!("/providers/{id}");
 
-    let guardrail = match serde_json::from_slice::<serde_json::Value>(&body) {
+    let provider = match serde_json::from_slice::<serde_json::Value>(&body) {
         Ok(value) => value,
-        Err(err) => return APIError::BadRequest(format!("Invalid JSON: {err}")).into_response(),
+        Err(err) => {
+            return APIError::BadRequest(format!("Invalid JSON: {}", err)).into_response();
+        }
     };
 
-    let evaluation = SCHEMA_VALIDATOR.evaluate(&guardrail);
+    let evaluation = SCHEMA_VALIDATOR.evaluate(&provider);
     if !evaluation.flag().valid {
         return APIError::BadRequest(format!(
             "JSON schema validation error: {}",
@@ -191,24 +196,20 @@ async fn update(state: AppState, id: &str, body: Bytes) -> Response {
         .into_response();
     }
 
-    let guardrail = match serde_json::from_value::<Guardrail>(guardrail) {
+    let provider = match serde_json::from_value::<Provider>(provider) {
         Ok(value) => value,
         Err(err) => {
-            return APIError::BadRequest(format!("Invalid guardrail data: {err}")).into_response();
+            return APIError::BadRequest(format!("Invalid provider data: {}", err)).into_response();
         }
     };
 
-    if let Err(err) = validate_guardrail_definition(id, &guardrail) {
-        return APIError::BadRequest(err).into_response();
-    }
-
-    match state.config_provider.put(&key, &guardrail).await {
+    match state.config_provider.put(&key, &provider).await {
         Ok(res) => match res {
             PutEntry::Created => (
                 StatusCode::CREATED,
                 ItemResponse {
                     key: key.to_string(),
-                    value: guardrail,
+                    value: provider,
                     created_index: None,
                     modified_index: None,
                 },
@@ -218,7 +219,7 @@ async fn update(state: AppState, id: &str, body: Bytes) -> Response {
                 StatusCode::OK,
                 ItemResponse {
                     key: key.to_string(),
-                    value: guardrail,
+                    value: provider,
                     created_index: None,
                     modified_index: None,
                 },
