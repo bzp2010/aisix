@@ -5,10 +5,10 @@ use log::error;
 use serde_json::json;
 use thiserror::Error;
 
-use crate::{
-    config::entities::{ApiKey, ResourceEntry},
-    proxy::hooks::RequestContext,
-};
+use aisix_core::entities::ApiKey;
+use crate::config::entities::ResourceEntry;
+
+use crate::proxy::hooks::RequestContext;
 
 #[derive(Clone)]
 pub struct RequestModel(#[allow(unused)] pub String);

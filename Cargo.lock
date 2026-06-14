@@ -30,8 +30,11 @@ name = "aisix"
 version = "0.1.0"
 dependencies = [
  "aisix-admin-ui",
+ "aisix-core",
  "aisix-guardrail",
  "aisix-llm",
+ "aisix-observability",
+ "aisix-utils",
  "anyhow",
  "arc-swap",
  "assert_matches",
@@ -52,7 +55,6 @@ dependencies = [
  "etcd-client",
  "fastrace",
  "fastrace-axum",
- "fastrace-opentelemetry",
  "fastrace-reqwest",
  "fastrace-tracing",
  "futures",
@@ -61,14 +63,9 @@ dependencies = [
  "http-body-util",
  "jsonschema",
  "log",
- "logforth",
  "metrics",
- "metrics-exporter-otel",
  "openssl",
- "opentelemetry",
- "opentelemetry-otlp",
  "opentelemetry-semantic-conventions 0.31.0",
- "opentelemetry_sdk",
  "percent-encoding",
  "pin-project",
  "pretty_assertions",
@@ -105,6 +102,25 @@ dependencies = [
  "mime_guess",
  "pretty_assertions",
  "rust-embed",
+]
+
+[[package]]
+name = "aisix-core"
+version = "0.1.0"
+dependencies = [
+ "aisix-guardrail",
+ "aisix-llm",
+ "aisix-utils",
+ "assert_matches",
+ "cel",
+ "jsonschema",
+ "log",
+ "pretty_assertions",
+ "rstest",
+ "serde",
+ "serde_json",
+ "tokio-test",
+ "utoipa",
 ]
 
 [[package]]
@@ -151,6 +167,37 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "aisix-observability"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fastrace",
+ "fastrace-opentelemetry",
+ "log",
+ "logforth",
+ "metrics",
+ "metrics-exporter-otel",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "tokio",
+]
+
+[[package]]
+name = "aisix-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fastrace",
+ "jsonschema",
+ "log",
+ "pin-project",
+ "pretty_assertions",
+ "tokio",
  "uuid",
 ]
 

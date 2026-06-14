@@ -7,10 +7,10 @@ use axum::{
 use fastrace::Span;
 use serde_json::json;
 
-use crate::{
-    config::entities::{ApiKey, ResourceEntry},
-    proxy::AppState,
-};
+use aisix_core::entities::ApiKey;
+use crate::config::entities::ResourceEntry;
+
+use crate::proxy::AppState;
 
 #[derive(Debug)]
 pub enum AuthError {

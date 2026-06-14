@@ -27,7 +27,6 @@ jobs:
         with:
           node-version: lts/*
           cache: "pnpm"
-          cache-dependency-path: crates/admin-ui/ui/pnpm-lock.yaml
 
       - name: Setup Rust toolchain
         run: rustup toolchain install stable --profile minimal

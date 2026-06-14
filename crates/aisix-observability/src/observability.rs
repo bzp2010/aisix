@@ -18,8 +18,6 @@ use opentelemetry_sdk::{
 };
 use tokio::{runtime::Handle, sync::oneshot, task::JoinHandle};
 
-use crate::utils;
-
 pub const INSTRUMENTATION_NAME: &str = "aisix";
 
 pub fn shutdown_handler<F, Fut>(f: F) -> (oneshot::Sender<()>, tokio::task::JoinHandle<()>)
@@ -101,9 +99,8 @@ pub fn init_observability_metric(
 
     metrics::set_global_recorder(OpenTelemetryRecorder::new(meter))
         .context("failed to initialize metric recorder")?;
-    utils::metrics::describe_metrics();
+    crate::metrics::describe_metrics();
 
-    // shutting down signal handler
     Ok(shutdown_handler(|| async move {
         if let Err(e) = meter_provider.shutdown() {
             error!("Error shutting down meter provider: {}", e);

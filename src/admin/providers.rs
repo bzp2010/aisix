@@ -11,12 +11,10 @@ use crate::{
         AppState,
         types::{APIError, DeleteResponse, ItemResponse, ListResponse},
     },
-    config::{
-        PutEntry,
-        entities::{Model, Provider, providers::SCHEMA_VALIDATOR},
-    },
-    utils::jsonschema::format_evaluation_error,
+    config::PutEntry,
 };
+use aisix_core::entities::{Model, Provider, providers::SCHEMA_VALIDATOR};
+use aisix_utils::jsonschema::format_evaluation_error;
 
 pub const OPENAPI_TAG: &str = "Providers";
 

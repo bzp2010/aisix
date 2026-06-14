@@ -18,8 +18,10 @@ use axum::{
 };
 
 use self::message_history::MessageHistoryStorage;
+use crate::config::entities::ResourceRegistry;
+
 use crate::{
-    config::{Config, entities::ResourceRegistry},
+    config::Config,
     gateway::Gateway,
 };
 

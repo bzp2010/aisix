@@ -68,10 +68,8 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::{
-        config::entities::types::{HasRateLimit, RateLimit, RateLimitMetric},
-        proxy::hooks::rate_limit::ratelimit::utils::{CheckPhase, RateLimitState, run_check},
-    };
+    use aisix_core::entities::types::{HasRateLimit, RateLimit, RateLimitMetric};
+    use crate::proxy::hooks::rate_limit::ratelimit::utils::{CheckPhase, RateLimitState, run_check};
 
     // --- MockEntity helper shared by integration tests ---
 

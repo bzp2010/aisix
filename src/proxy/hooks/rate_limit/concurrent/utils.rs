@@ -3,7 +3,7 @@ use http::{HeaderMap, HeaderValue, StatusCode};
 use log::error;
 
 use super::{ConcurrencyError, ConcurrencyInfo, ConcurrencyPermit, get_concurrency_limiter};
-use crate::config::entities::types::{HasRateLimit, RateLimitMetric};
+use aisix_core::entities::types::{HasRateLimit, RateLimitMetric};
 
 fn insert_header(headers: &mut HeaderMap, name: &'static str, value: String) {
     headers.insert(name, HeaderValue::from_str(&value).unwrap());

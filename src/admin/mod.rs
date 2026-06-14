@@ -27,8 +27,9 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use crate::{
     admin::types::AuthError,
-    config::{Config, ConfigProvider, entities::ResourceRegistry},
+    config::{Config, ConfigProvider},
 };
+use crate::config::entities::ResourceRegistry;
 
 pub const PATH_PREFIX: &str = "/aisix/admin";
 

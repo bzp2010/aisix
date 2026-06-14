@@ -4,8 +4,8 @@ use axum::{Json, response::IntoResponse};
 use http::{HeaderMap, HeaderValue, StatusCode};
 use log::error;
 
-use super::{RateLimitError, RateLimitInfo, RateLimitRule, get_rate_limiter};
-use crate::config::entities::types::{HasRateLimit, RateLimitMetric};
+use super::{RateLimitError, RateLimitInfo, get_rate_limiter, rate_limit_config_to_rules};
+use aisix_core::entities::types::{HasRateLimit, RateLimitMetric};
 
 /// Helper to convert duration to human-readable format (e.g., "1s", "6m0s")
 fn format_duration(duration: std::time::Duration) -> String {
@@ -171,7 +171,7 @@ pub async fn run_check<T: HasRateLimit>(
         return Ok(Vec::new());
     };
     let limiter = get_rate_limiter();
-    let rules: Vec<(RateLimitMetric, RateLimitRule)> = rate_limit.into();
+    let rules = rate_limit_config_to_rules(rate_limit);
     let mut results = Vec::new();
     for (metric, rule) in rules {
         if phase.should_skip(&metric) {

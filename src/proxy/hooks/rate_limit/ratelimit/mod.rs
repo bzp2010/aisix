@@ -11,7 +11,7 @@ use thiserror::Error;
 mod local;
 pub mod utils;
 
-use crate::config::entities::types::{RateLimit as RateLimitConfig, RateLimitMetric};
+use aisix_core::entities::types::{RateLimit as RateLimitConfig, RateLimitMetric};
 
 /// Rate limit error types
 #[derive(Debug, Clone, Error)]
@@ -41,24 +41,23 @@ impl From<RateLimitRule> for Quota {
     }
 }
 
-/// Convert a `RateLimitConfig` into a list of (metric, rule) pairs
-impl From<RateLimitConfig> for Vec<(RateLimitMetric, RateLimitRule)> {
-    fn from(config: RateLimitConfig) -> Self {
-        let mut rules = Vec::new();
-        if let Some(n) = config.token_per_minute {
-            rules.push((RateLimitMetric::TPM, RateLimitRule::new(n, 60)));
-        }
-        if let Some(n) = config.token_per_day {
-            rules.push((RateLimitMetric::TPD, RateLimitRule::new(n, 86400)));
-        }
-        if let Some(n) = config.request_per_minute {
-            rules.push((RateLimitMetric::RPM, RateLimitRule::new(n, 60)));
-        }
-        if let Some(n) = config.request_per_day {
-            rules.push((RateLimitMetric::RPD, RateLimitRule::new(n, 86400)));
-        }
-        rules
+pub(super) fn rate_limit_config_to_rules(
+    config: RateLimitConfig,
+) -> Vec<(RateLimitMetric, RateLimitRule)> {
+    let mut rules = Vec::new();
+    if let Some(n) = config.token_per_minute {
+        rules.push((RateLimitMetric::TPM, RateLimitRule::new(n, 60)));
     }
+    if let Some(n) = config.token_per_day {
+        rules.push((RateLimitMetric::TPD, RateLimitRule::new(n, 86400)));
+    }
+    if let Some(n) = config.request_per_minute {
+        rules.push((RateLimitMetric::RPM, RateLimitRule::new(n, 60)));
+    }
+    if let Some(n) = config.request_per_day {
+        rules.push((RateLimitMetric::RPD, RateLimitRule::new(n, 86400)));
+    }
+    rules
 }
 
 /// Snapshot of rate limit state for a single metric dimension
@@ -102,7 +101,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::config::entities::types::RateLimit;
+    use aisix_core::entities::types::RateLimit;
 
     #[test]
     fn test_rate_limit_rule_new() {
@@ -126,7 +125,7 @@ mod tests {
             request_per_day: Some(5000),
             request_concurrency: None,
         };
-        let rules: Vec<(RateLimitMetric, RateLimitRule)> = rate_limit.into();
+        let rules = super::rate_limit_config_to_rules(rate_limit);
         assert_eq!(rules.len(), 4);
         assert_eq!(
             rules
@@ -175,10 +174,7 @@ mod tests {
             request_per_day: None,
             request_concurrency: None,
         };
-        assert_eq!(
-            <RateLimit as Into<Vec<(RateLimitMetric, RateLimitRule)>>>::into(rate_limit).len(),
-            0
-        );
+        assert_eq!(super::rate_limit_config_to_rules(rate_limit).len(), 0);
     }
 
     #[test]

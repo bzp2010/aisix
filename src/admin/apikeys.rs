@@ -11,12 +11,10 @@ use crate::{
         AppState,
         types::{APIError, DeleteResponse, ItemResponse, ListResponse},
     },
-    config::{
-        PutEntry,
-        entities::{ApiKey, apikeys::SCHEMA_VALIDATOR},
-    },
-    utils::jsonschema::format_evaluation_error,
+    config::PutEntry,
 };
+use aisix_core::entities::{ApiKey, apikeys::SCHEMA_VALIDATOR};
+use aisix_utils::jsonschema::format_evaluation_error;
 
 pub const OPENAPI_TAG: &str = "API Keys";
 

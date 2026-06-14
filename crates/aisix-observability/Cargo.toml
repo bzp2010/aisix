@@ -1,0 +1,36 @@
+[package]
+name = "aisix-observability"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fastrace.workspace = true
+tokio.workspace = true
+log = { version = "0.4.29", features = ["kv", "kv_serde"] }
+
+metrics = "0.24.2"
+
+fastrace-opentelemetry = "0.17.0"
+logforth = { version = "0.29.1", features = [
+  "starter-log",
+  "diagnostic-fastrace",
+  "append-fastrace",
+] }
+metrics-exporter-otel = "0.3.0"
+opentelemetry = "0.31.0"
+opentelemetry-otlp = { version = "0.31.0", default-features = false, features = [
+  "http-proto",
+  "internal-logs",
+  "logs",
+  "metrics",
+  "reqwest-client",
+  "trace",
+  "grpc-tonic",
+] }
+opentelemetry_sdk = { version = "0.31.0", features = [
+  "rt-tokio",
+  "experimental_async_runtime",
+  "experimental_metrics_periodicreader_with_async_runtime",
+] }

@@ -1,8 +1,10 @@
 use http::HeaderMap;
 use reqwest::Url;
 
+use aisix_core::entities::{Provider, providers::ProviderConfig};
+use crate::config::entities::ResourceEntry;
+
 use crate::{
-    config::entities::{Provider, ResourceEntry, providers::ProviderConfig},
     gateway::{
         Gateway,
         error::{GatewayError, Result},
@@ -194,16 +196,14 @@ mod tests {
     use reqwest::Url;
 
     use super::provider_auth_and_base_url;
-    use crate::{
-        config::entities::providers::ProviderConfig,
-        gateway::providers::configs::{
-            AzureProviderConfig, BedrockProviderConfig, CohereProviderConfig,
-            FireworksAiProviderConfig, GroqProviderConfig, MistralProviderConfig,
-            ModelScopeCnProviderConfig, ModelScopeProviderConfig, MoonshotAiCnProviderConfig,
-            MoonshotAiProviderConfig, OpenRouterProviderConfig, SiliconFlowCnProviderConfig,
-            SiliconFlowProviderConfig, StepFunProviderConfig, XaiProviderConfig,
-            ZhipuAiProviderConfig,
-        },
+    use aisix_core::entities::providers::ProviderConfig;
+    use crate::gateway::providers::configs::{
+        AzureProviderConfig, BedrockProviderConfig, CohereProviderConfig,
+        FireworksAiProviderConfig, GroqProviderConfig, MistralProviderConfig,
+        ModelScopeCnProviderConfig, ModelScopeProviderConfig, MoonshotAiCnProviderConfig,
+        MoonshotAiProviderConfig, OpenRouterProviderConfig, SiliconFlowCnProviderConfig,
+        SiliconFlowProviderConfig, StepFunProviderConfig, XaiProviderConfig,
+        ZhipuAiProviderConfig,
     };
 
     #[test]

@@ -29,7 +29,7 @@ async fn get_request_model_name(ctx: &RequestContext) -> String {
 
 async fn record_llm_latency(ctx: &RequestContext, model_name: String) {
     histogram!(
-        crate::utils::metrics::LLM_LATENCY_KEY,
+        aisix_observability::metrics::LLM_LATENCY_KEY,
         "model" => model_name,
     )
     .record(get_start_time(ctx).await.elapsed().as_millis() as f64);
@@ -37,21 +37,21 @@ async fn record_llm_latency(ctx: &RequestContext, model_name: String) {
 
 fn record_token_usage(model_name: String, usage: &Usage) {
     counter!(
-        crate::utils::metrics::TOKEN_COUNT_KEY,
+        aisix_observability::metrics::TOKEN_COUNT_KEY,
         "type" => "prompt",
         "model" => model_name.clone(),
     )
     .increment(usage.input_tokens.unwrap_or(0) as u64);
 
     counter!(
-        crate::utils::metrics::TOKEN_COUNT_KEY,
+        aisix_observability::metrics::TOKEN_COUNT_KEY,
         "type" => "completion",
         "model" => model_name.clone(),
     )
     .increment(usage.output_tokens.unwrap_or(0) as u64);
 
     counter!(
-        crate::utils::metrics::TOKEN_COUNT_KEY,
+        aisix_observability::metrics::TOKEN_COUNT_KEY,
         "type" => "total",
         "model" => model_name,
     )
@@ -75,7 +75,7 @@ pub async fn record_first_token_latency(ctx: &mut RequestContext) {
     let model_name = get_request_model_name(ctx).await;
 
     histogram!(
-        crate::utils::metrics::LLM_FIRST_TOKEN_LATENCY_KEY,
+        aisix_observability::metrics::LLM_FIRST_TOKEN_LATENCY_KEY,
         "model" => model_name,
     )
     .record(get_start_time(ctx).await.elapsed().as_millis() as f64);

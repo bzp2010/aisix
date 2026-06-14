@@ -11,8 +11,9 @@ use thiserror::Error;
 
 pub(crate) mod streaming;
 
+use aisix_core::entities::guardrails::GuardrailConfig;
+
 use crate::{
-    config::entities::guardrails::GuardrailConfig,
     gateway::{
         error::GatewayError,
         types::openai::{
@@ -362,11 +363,9 @@ mod tests {
         output_payload_from_check_payload, output_payload_to_chat_messages,
         run_input_guardrail_check,
     };
-    use crate::{
-        config::entities::guardrails::GuardrailConfig,
-        gateway::types::openai::{
-            ChatMessage, ContentPart, FunctionCall, MessageContent, ToolCall,
-        },
+    use aisix_core::entities::guardrails::GuardrailConfig;
+    use crate::gateway::types::openai::{
+        ChatMessage, ContentPart, FunctionCall, MessageContent, ToolCall,
     };
 
     const INPUT_ONLY_STAGES: &[GuardrailStage] = &[GuardrailStage::Input];

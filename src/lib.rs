@@ -1,7 +1,6 @@
 mod admin;
 pub mod config;
 mod proxy;
-pub mod utils;
 
 pub mod gateway {
     pub use aisix_llm::*;
@@ -19,7 +18,7 @@ use clap::Parser;
 use log::{error, info};
 use tokio::{select, sync::oneshot};
 
-use crate::utils::observability::init_observability;
+use aisix_observability::observability::init_observability;
 
 /// Git hash of the aisix core at build time.
 pub const GIT_HASH: &str = env!("VERGEN_GIT_SHA");
@@ -89,7 +88,7 @@ pub async fn run_with_provider(
     ob_shutdown_task: tokio::task::JoinHandle<()>,
 ) -> Result<()> {
     let resources =
-        Arc::new(config::entities::ResourceRegistry::new(config_provider.clone()).await);
+        Arc::new(crate::config::entities::ResourceRegistry::new(config_provider.clone()).await);
     let message_history_storage: Arc<dyn proxy::message_history::MessageHistoryStorage> =
         Arc::new(proxy::message_history::InMemoryMessageHistoryStorage::default());
 

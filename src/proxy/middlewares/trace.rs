@@ -25,7 +25,7 @@ use opentelemetry_semantic_conventions::trace::{
     HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, HTTP_ROUTE, URL_PATH,
 };
 
-use crate::utils::future::WithSpan;
+use aisix_utils::future::WithSpan;
 
 pub const TRACEPARENT_HEADER: &str = "traceparent";
 
@@ -105,7 +105,7 @@ impl TimedBody {
         }
         let latency = self.start_time.elapsed().as_millis() as f64;
         histogram!(
-            crate::utils::metrics::REQUEST_LATENCY_KEY,
+            aisix_observability::metrics::REQUEST_LATENCY_KEY,
             "method" => self.metric_method.clone(),
             "endpoint" => self.metric_endpoint.clone(),
             "status_code" => self.metric_status_code.to_string(),
@@ -141,11 +141,11 @@ pub async fn trace(mut req: Request, next: Next) -> Response<TimedBody> {
         [
             (
                 attributes::AISIX_INSTANCE_ID,
-                crate::utils::instance::instance_id(),
+                aisix_utils::instance::instance_id(),
             ),
             (
                 attributes::AISIX_INSTANCE_RUN_ID,
-                crate::utils::instance::run_id(),
+                aisix_utils::instance::run_id(),
             ),
             (HTTP_REQUEST_METHOD, method.to_string()),
             (URL_PATH, path.clone()),
@@ -209,7 +209,7 @@ pub async fn trace(mut req: Request, next: Next) -> Response<TimedBody> {
     );
 
     counter!(
-        crate::utils::metrics::REQUEST_COUNT_KEY,
+        aisix_observability::metrics::REQUEST_COUNT_KEY,
         "method" => metric_method,
         "endpoint" => metric_endpoint,
         "status_code" => metric_status_code.to_string(),

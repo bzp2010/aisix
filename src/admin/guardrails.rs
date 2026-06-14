@@ -11,15 +11,13 @@ use crate::{
         AppState,
         types::{APIError, DeleteResponse, ItemResponse, ListResponse},
     },
-    config::{
-        PutEntry,
-        entities::{
-            Guardrail, Policy,
-            guardrails::{SCHEMA_VALIDATOR, validate_guardrail_definition},
-        },
-    },
-    utils::jsonschema::format_evaluation_error,
+    config::PutEntry,
 };
+use aisix_core::entities::{
+    Guardrail, Policy,
+    guardrails::{SCHEMA_VALIDATOR, validate_guardrail_definition},
+};
+use aisix_utils::jsonschema::format_evaluation_error;
 
 pub const OPENAPI_TAG: &str = "Guardrails";
 

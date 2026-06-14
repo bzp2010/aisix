@@ -1,0 +1,22 @@
+[package]
+name = "aisix-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aisix-llm = { path = "../aisix-llm" }
+aisix-guardrail = { path = "../aisix-guardrail" }
+aisix-utils = { path = "../aisix-utils" }
+cel = "0.13.0"
+jsonschema = { version = "0.46.0", default-features = false }
+log = { version = "0.4.29", features = ["kv", "kv_serde"] }
+serde.workspace = true
+serde_json.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+assert_matches.workspace = true
+pretty_assertions.workspace = true
+rstest = "0.26"
+tokio-test = "0.4"

@@ -4,10 +4,10 @@ use axum::extract::FromRequestParts;
 use http::request::Parts;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::{
-    config::entities::{ApiKey, ResourceEntry},
-    proxy::AppState,
-};
+use aisix_core::entities::ApiKey;
+use crate::config::entities::ResourceEntry;
+
+use crate::proxy::AppState;
 
 struct RequestContextInner {
     app_state: AppState,

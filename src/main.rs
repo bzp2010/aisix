@@ -6,7 +6,7 @@ use clap::Parser;
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    aisix::utils::instance::init().context("failed to initialize instance")?;
+    aisix_utils::instance::init().context("failed to initialize instance")?;
 
     run(args.config).await
 }

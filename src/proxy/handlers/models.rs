@@ -8,10 +8,10 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::{
-    config::entities::{ApiKey, ResourceEntry},
-    proxy::{AppState, hooks::RequestContext},
-};
+use aisix_core::entities::ApiKey;
+use crate::config::entities::ResourceEntry;
+
+use crate::proxy::{AppState, hooks::RequestContext};
 
 // Model structure representing a single model
 #[derive(Serialize)]

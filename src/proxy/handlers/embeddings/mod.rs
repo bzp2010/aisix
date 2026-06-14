@@ -13,8 +13,10 @@ use log::error;
 use span_attributes::{request_span_properties, response_span_properties};
 pub use types::EmbeddingError;
 
+use aisix_core::entities::Model;
+use crate::config::entities::ResourceEntry;
+
 use crate::{
-    config::entities::{Model, ResourceEntry},
     gateway::{
         error::GatewayError,
         types::{
@@ -28,8 +30,8 @@ use crate::{
         provider::create_provider_instance,
         utils::trace::span_attributes::apply_span_properties,
     },
-    utils::future::{WithSpan, maybe_timeout},
 };
+use aisix_utils::future::{WithSpan, maybe_timeout};
 
 fn embedding_usage(response: &EmbeddingResponse) -> Usage {
     match &response.usage {
@@ -60,7 +62,7 @@ pub async fn embeddings(
 
     let gateway = state.gateway();
     let resources = state.resources();
-    let provider = model.provider(resources.as_ref()).ok_or_else(|| {
+    let provider = resources.providers.get_by_id(&model.provider_id).ok_or_else(|| {
         GatewayError::Internal(format!("provider {} not found", model.provider_id))
     })?;
     let provider_instance = create_provider_instance(gateway.as_ref(), &provider)?;
