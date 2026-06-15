@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/aisix-core", "crates/aisix-utils", "crates/aisix-observability", "crates/aisix-llm", "crates/aisix-guardrail", "crates/aisix-config", "crates/aisix-admin"]
+members = ["crates/aisix-core", "crates/aisix-utils", "crates/aisix-observability", "crates/aisix-llm", "crates/aisix-guardrail", "crates/aisix-config", "crates/aisix-admin", "crates/aisix-proxy"]
 resolver = "3"
 
 [workspace.package]
@@ -64,6 +64,7 @@ aisix-llm = { path = "crates/aisix-llm" }
 aisix-guardrail = { path = "crates/aisix-guardrail" }
 aisix-config = { path = "crates/aisix-config" }
 aisix-admin = { path = "crates/aisix-admin" }
+aisix-proxy = { path = "crates/aisix-proxy" }
 anyhow.workspace = true
 tokio.workspace = true
 reqwest.workspace = true

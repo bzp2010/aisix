@@ -1,5 +1,4 @@
 pub mod config;
-mod proxy;
 
 pub mod gateway {
     pub use aisix_llm::*;
@@ -88,16 +87,23 @@ pub async fn run_with_provider(
 ) -> Result<()> {
     let resources =
         Arc::new(crate::config::entities::ResourceRegistry::new(config_provider.clone()).await);
-    let message_history_storage: Arc<dyn proxy::message_history::MessageHistoryStorage> =
-        Arc::new(proxy::message_history::InMemoryMessageHistoryStorage::default());
+    let message_history_storage: Arc<dyn aisix_proxy::message_history::MessageHistoryStorage> =
+        Arc::new(aisix_proxy::message_history::InMemoryMessageHistoryStorage::default());
 
     let gateway = Arc::new(gateway::Gateway::new(
         gateway::providers::default_provider_registry()
             .context("failed to build default gateway provider registry")?,
     ));
 
-    let proxy_router = proxy::create_router(proxy::AppState::new(
-        config.clone(),
+    let proxy_router = aisix_proxy::create_router(aisix_proxy::AppState::new(
+        aisix_proxy::ServerCommonCors {
+            enabled: config.server.proxy.cors.enabled,
+            allowed_origins: config.server.proxy.cors.allowed_origins.clone(),
+            allowed_methods: config.server.proxy.cors.allowed_methods.clone(),
+            allowed_headers: config.server.proxy.cors.allowed_headers.clone(),
+            exposed_headers: config.server.proxy.cors.exposed_headers.clone(),
+            allow_credentials: config.server.proxy.cors.allow_credentials,
+        },
         resources.clone(),
         gateway,
         message_history_storage,

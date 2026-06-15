@@ -1,0 +1,41 @@
+[package]
+name = "aisix-proxy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aisix-core = { path = "../aisix-core" }
+aisix-config = { path = "../aisix-config" }
+aisix-llm = { path = "../aisix-llm" }
+aisix-guardrail = { path = "../aisix-guardrail" }
+aisix-observability = { path = "../aisix-observability" }
+aisix-utils = { path = "../aisix-utils" }
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+bytes.workspace = true
+cel.workspace = true
+fastrace.workspace = true
+futures.workspace = true
+http.workspace = true
+pin-project.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+log = "0.4"
+metrics = "0.24.2"
+dashmap = "6.1.0"
+http-body = "1.0.1"
+opentelemetry-semantic-conventions = { version = "0.31.0", features = ["semconv_experimental"] }
+skp-ratelimit = { git = "https://github.com/bzp2010/skp-ratelimit.git", branch = "bzp/feat-custom-cost", default-features = false, features = ["memory"] }
+tower-http = { version = "0.6.10", features = ["cors"] }
+
+[dev-dependencies]
+assert_matches.workspace = true
+pretty_assertions.workspace = true
+http-body-util = "0.1.3"

@@ -35,6 +35,7 @@ dependencies = [
  "aisix-guardrail",
  "aisix-llm",
  "aisix-observability",
+ "aisix-proxy",
  "aisix-utils",
  "anyhow",
  "arc-swap",
@@ -216,6 +217,43 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "tokio",
+]
+
+[[package]]
+name = "aisix-proxy"
+version = "0.1.0"
+dependencies = [
+ "aisix-config",
+ "aisix-core",
+ "aisix-guardrail",
+ "aisix-llm",
+ "aisix-observability",
+ "aisix-utils",
+ "anyhow",
+ "assert_matches",
+ "async-trait",
+ "axum",
+ "bytes",
+ "cel",
+ "dashmap",
+ "fastrace",
+ "futures",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "log",
+ "metrics",
+ "opentelemetry-semantic-conventions 0.31.0",
+ "pin-project",
+ "pretty_assertions",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "skp-ratelimit",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-http",
+ "uuid",
 ]
 
 [[package]]
