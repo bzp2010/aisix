@@ -5,6 +5,7 @@ import { App, defaultConfig } from './setup.js';
 
 export const ADMIN_BASE_URL = 'http://127.0.0.1:3001';
 export const ADMIN_PREFIX = '/aisix/admin';
+export const MODELS_DEV_PREFIX = '/aisix/models-dev';
 export const GUARDRAILS_URL = '/guardrails';
 export const MODELS_URL = '/models';
 export const POLICIES_URL = '/policies';
@@ -12,6 +13,9 @@ export const PROVIDERS_URL = '/providers';
 
 export const adminUrl = (path: string) =>
   `${ADMIN_BASE_URL}${ADMIN_PREFIX}${path}`;
+
+export const catalogUrl = (path: string) =>
+  `${ADMIN_BASE_URL}${MODELS_DEV_PREFIX}${path}`;
 
 export const bearerAuthHeader = (key: string) => ({
   Authorization: `Bearer ${key}`,
@@ -72,3 +76,13 @@ export const adminDelete = async (
   path: string,
   headers: Record<string, string> = {},
 ) => client.delete(adminUrl(path), { headers });
+
+export const catalogGet = async (
+  path: string,
+  headers: Record<string, string> = {},
+) => client.get(catalogUrl(path), { headers });
+
+export const catalogPost = async (
+  path: string,
+  headers: Record<string, string> = {},
+) => client.post(catalogUrl(path), undefined, { headers });

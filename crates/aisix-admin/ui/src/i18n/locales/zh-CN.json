@@ -151,6 +151,8 @@
       "modelLabel": "模型提供商模型 *",
       "modelPlaceholder": "例如：gpt-4.1、deepseek-chat 或 anthropic.claude-3-5-sonnet-20240620-v1:0",
       "modelRequired": "请输入模型提供商侧模型标识。",
+      "modelNoMatch": "没有匹配的模型。",
+      "browseModels": "浏览可用模型",
       "providerConfig": "模型提供商配置",
       "apiKeyLabel": "API Key",
       "apiBase": "API Base",
@@ -411,7 +413,15 @@
   },
   "settings": {
     "title": "设置",
-    "comingSoon": "设置内容即将上线。"
+    "data": {
+      "title": "数据",
+      "catalogTitle": "模型目录",
+      "catalogDescription": "创建模型条目时用于浏览可用模型的参考数据。",
+      "catalogRefresh": "立即刷新",
+      "catalogRefreshing": "刷新中…",
+      "catalogRefreshSuccess": "目录刷新成功。",
+      "catalogRefreshError": "目录刷新失败。"
+    }
   },
   "table": {
     "loading": "加载中…",

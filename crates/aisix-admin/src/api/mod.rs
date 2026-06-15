@@ -1,4 +1,5 @@
 mod apikeys;
+mod catalog;
 mod guardrails;
 mod models;
 mod playground;
@@ -30,6 +31,8 @@ use utoipa_scalar::{Scalar, Servable as ScalarServable};
 
 use aisix_config::{ConfigProvider, entities::ResourceRegistry};
 
+use crate::catalog::CatalogCache;
+
 use self::types::AuthError;
 
 pub const PATH_PREFIX: &str = "/aisix/admin";
@@ -43,7 +46,8 @@ pub const PATH_PREFIX: &str = "/aisix/admin";
         (name = apikeys::OPENAPI_TAG, description = "Admin API for managing API keys"),
         (name = guardrails::OPENAPI_TAG, description = "Admin API for managing guardrails"),
         (name = policies::OPENAPI_TAG, description = "Admin API for managing guardrail policies"),
-        (name = providers::OPENAPI_TAG, description = "Admin API for managing AI providers")
+        (name = providers::OPENAPI_TAG, description = "Admin API for managing AI providers"),
+        (name = catalog::OPENAPI_TAG, description = "Reference data from models.dev catalog")
     ),
     security(
         ("bearer" = []),
@@ -75,6 +79,9 @@ pub const PATH_PREFIX: &str = "/aisix/admin";
         policies::post,
         policies::put,
         policies::delete,
+        catalog::list_providers,
+        catalog::get_provider_models,
+        catalog::refresh,
     )
 )]
 struct ApiDoc;
@@ -179,6 +186,7 @@ pub struct AppState {
     config_provider: Arc<dyn ConfigProvider>,
     resources: Arc<ResourceRegistry>,
     proxy_router: Option<Router>,
+    pub(crate) catalog_cache: Arc<CatalogCache>,
 }
 
 impl AppState {
@@ -189,12 +197,14 @@ impl AppState {
         resources: Arc<ResourceRegistry>,
         proxy_router: Option<Router>,
     ) -> Self {
+        let catalog_cache = CatalogCache::new();
         Self {
             cors_config,
             admin_keys,
             config_provider,
             resources,
             proxy_router,
+            catalog_cache,
         }
     }
 
@@ -254,6 +264,17 @@ pub fn create_router(state: AppState) -> Result<Router> {
                                 .delete(policies::delete),
                         ),
                 )
+                .layer(axum::middleware::from_fn_with_state(state.clone(), auth)),
+        )
+        .nest(
+            "/aisix/models-dev",
+            Router::new()
+                .route("/providers", get(catalog::list_providers))
+                .route(
+                    "/providers/{id}/models",
+                    get(catalog::get_provider_models),
+                )
+                .route("/refresh", post(catalog::refresh))
                 .layer(axum::middleware::from_fn_with_state(state.clone(), auth)),
         )
         // These routes use API key authentication instead of Admin key authentication.

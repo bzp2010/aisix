@@ -12,9 +12,13 @@ aisix-config = { path = "../aisix-config" }
 aisix-core = { path = "../aisix-core" }
 aisix-utils = { path = "../aisix-utils" }
 anyhow.workspace = true
+arc-swap = "1"
 axum.workspace = true
 bytes.workspace = true
 http.workspace = true
+log = "0.4"
+reqwest = { workspace = true }
+tokio.workspace = true
 mime_guess = "2.0.5"
 rust-embed = { version = "8.11.0", default-features = false, features = [
   "axum-ex",

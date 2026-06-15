@@ -1,3 +1,4 @@
+pub(crate) mod catalog;
 mod ui;
 pub mod api;
 

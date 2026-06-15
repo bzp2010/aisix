@@ -151,6 +151,8 @@
       "modelLabel": "Provider Model *",
       "modelPlaceholder": "e.g. gpt-4.1, deepseek-chat, or anthropic.claude-3-5-sonnet-20240620-v1:0",
       "modelRequired": "Please enter a provider model identifier.",
+      "modelNoMatch": "No matching models.",
+      "browseModels": "Browse available models",
       "providerConfig": "Provider Config",
       "apiKeyLabel": "API Key",
       "apiBase": "API Base",
@@ -411,7 +413,15 @@
   },
   "settings": {
     "title": "Settings",
-    "comingSoon": "Settings content coming soon."
+    "data": {
+      "title": "Data",
+      "catalogTitle": "Model Catalog",
+      "catalogDescription": "Reference data for browsing available models when creating model entries.",
+      "catalogRefresh": "Refresh Now",
+      "catalogRefreshing": "Refreshing…",
+      "catalogRefreshSuccess": "Catalog refreshed successfully.",
+      "catalogRefreshError": "Failed to refresh catalog."
+    }
   },
   "table": {
     "loading": "Loading…",

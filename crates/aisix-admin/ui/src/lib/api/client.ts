@@ -1,6 +1,8 @@
 import type {
   ApiError,
   ApiKey,
+  CatalogModel,
+  CatalogProvider,
   DeleteResponse,
   Guardrail,
   ItemResponse,
@@ -12,6 +14,7 @@ import type {
 
 /** Admin API base URL — proxied via Vite dev-server to avoid CORS */
 const BASE = '/aisix/admin';
+const MODELS_DEV_BASE = '/aisix/models-dev';
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -30,8 +33,9 @@ async function request<T>(
   path: string,
   adminKey: string,
   body?: unknown,
+  base = BASE,
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -151,4 +155,16 @@ export const policiesApi = {
 
   delete: (adminKey: string, id: string) =>
     request<DeleteResponse>('DELETE', `/policies/${encodeURIComponent(id)}`, adminKey),
+};
+
+// ── models.dev Catalog ────────────────────────────────────────────────────────
+export const catalogApi = {
+  listProviders: (adminKey: string) =>
+    request<CatalogProvider[]>('GET', '/providers', adminKey, undefined, MODELS_DEV_BASE),
+
+  getProviderModels: (adminKey: string, providerId: string) =>
+    request<CatalogModel[]>('GET', `/providers/${encodeURIComponent(providerId)}/models`, adminKey, undefined, MODELS_DEV_BASE),
+
+  refresh: (adminKey: string) =>
+    request<void>('POST', '/refresh', adminKey, undefined, MODELS_DEV_BASE),
 };

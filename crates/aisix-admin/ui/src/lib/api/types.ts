@@ -238,6 +238,19 @@ export type Provider =
       config: BedrockProviderConfig;
     };
 
+// ── models.dev Catalog ────────────────────────────────────────────────────────
+export interface CatalogProvider {
+  id: string;
+  name: string;
+  api?: string;
+  doc?: string;
+}
+
+export interface CatalogModel {
+  id: string;
+  name: string;
+}
+
 // ── ApiKey ────────────────────────────────────────────────────────────────────
 export interface ApiKey {
   key: string;

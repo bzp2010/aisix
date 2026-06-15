@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { useForm } from '@tanstack/react-form';
 import { Plus, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { Model } from '@/lib/api/types';
+import { useCatalogProviderModels } from '@/lib/queries/catalog';
 import { useProviders } from '@/lib/queries/providers';
 
 export interface ModelFormProps {
@@ -92,7 +93,16 @@ export function ModelForm({
 }: ModelFormProps) {
   const { t } = useTranslation();
   const [clientError, setClientError] = useState<string>();
+  const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>();
   const providersQuery = useProviders();
+
+  useEffect(() => {
+    if (!initial?.provider_id || !providersQuery.data) return;
+    const found = providersQuery.data.list.find(
+      ({ key }) => key.replace('/providers/', '') === initial.provider_id,
+    );
+    if (found) setSelectedProviderType(found.value.type);
+  }, [initial?.provider_id, providersQuery.data]);
   const providerOptions = (providersQuery.data?.list ?? []).map(
     ({ key, value }) => ({
       value: key.replace('/providers/', ''),
@@ -101,6 +111,12 @@ export function ModelForm({
       type: value.type,
     }),
   );
+  const catalogModelsQuery = useCatalogProviderModels(selectedProviderType);
+  const catalogModelOptions = (catalogModelsQuery.data ?? []).map((m) => ({
+    value: m.id,
+    label: m.id,
+    name: m.name,
+  }));
 
   const form = useForm({
     defaultValues: {
@@ -229,6 +245,7 @@ export function ModelForm({
                     inputValue={field.state.value}
                     onValueChange={(provider) => {
                       setClientError(undefined);
+                      setSelectedProviderType(provider?.type);
                       field.handleChange(provider?.value ?? '');
                     }}
                     onInputValueChange={(inputValue) => {
@@ -362,23 +379,94 @@ export function ModelForm({
           </form.Field>
 
           <form.Field name="model">
-            {(field) => (
-              <Field
-                label={t('models.form.modelLabel')}
-                className="md:col-span-3"
-              >
-                <Input
-                  required
-                  value={field.state.value}
-                  onChange={(e) => {
-                    setClientError(undefined);
-                    field.handleChange(e.target.value);
-                  }}
-                  onBlur={field.handleBlur}
-                  placeholder={t('models.form.modelPlaceholder')}
-                />
-              </Field>
-            )}
+            {(field) => {
+              const selectedModel =
+                catalogModelOptions.find(
+                  (m) => m.value === field.state.value.trim(),
+                ) ?? null;
+
+              return (
+                <Field
+                  label={t('models.form.modelLabel')}
+                  className="md:col-span-3"
+                >
+                  {catalogModelOptions.length > 0 ? (
+                    <Combobox
+                      items={catalogModelOptions}
+                      itemToStringLabel={(m) => m.label}
+                      itemToStringValue={(m) => m.value}
+                      value={selectedModel}
+                      inputValue={field.state.value}
+                      onValueChange={(m) => {
+                        setClientError(undefined);
+                        field.handleChange(m?.value ?? '');
+                      }}
+                      onInputValueChange={(inputValue) => {
+                        setClientError(undefined);
+                        field.handleChange(inputValue);
+                      }}
+                      autoHighlight
+                    >
+                      <ComboboxInput
+                        showTrigger={false}
+                        placeholder={t('models.form.modelPlaceholder')}
+                        onBlur={field.handleBlur}
+                      >
+                        <InputGroupAddon align="inline-end" className="gap-1 pr-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <InputGroupButton
+                                asChild
+                                size="icon-sm"
+                                variant="ghost"
+                                aria-label={t('models.form.browseModels')}
+                              >
+                                <ComboboxTrigger />
+                              </InputGroupButton>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{t('models.form.browseModels')}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </InputGroupAddon>
+                      </ComboboxInput>
+                      <ComboboxContent>
+                        <ComboboxEmpty>
+                          {t('models.form.modelNoMatch')}
+                        </ComboboxEmpty>
+                        <ComboboxList>
+                          {(m) => (
+                            <ComboboxItem
+                              key={m.value}
+                              value={m}
+                              className="flex-col items-start gap-0.5"
+                            >
+                              <span className="font-mono text-xs text-foreground">
+                                {m.value}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {m.name}
+                              </span>
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                  ) : (
+                    <Input
+                      required
+                      value={field.state.value}
+                      onChange={(e) => {
+                        setClientError(undefined);
+                        field.handleChange(e.target.value);
+                      }}
+                      onBlur={field.handleBlur}
+                      placeholder={t('models.form.modelPlaceholder')}
+                    />
+                  )}
+                </Field>
+              );
+            }}
           </form.Field>
         </div>
       </section>
